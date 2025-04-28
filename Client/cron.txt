@@ -1,0 +1,4 @@
+
+# for root
+# Daily Reboot
+0 8 * * * /sbin/shutdown -r

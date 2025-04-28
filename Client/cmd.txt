@@ -1,0 +1,10 @@
+
+# copy file to systemd
+/etc/systemd/system
+
+systemctl enable bellSender@tty1.service
+
+systemctl stop bellSender@tty1.service
+
+systemctl start bellSender@tty1.service
+

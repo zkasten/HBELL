@@ -1,0 +1,12 @@
+# run after reboot
+@reboot /home/pi/bellService.sh > /dev/null 2> /dev/null &
+@reboot /home/pi/bellReceiver.sh > /dev/null 2> /dev/null &
+
+# Process check
+* * * * * /home/pi/bellService.sh > /dev/null 2> /dev/null &
+* * * * * /home/pi/bellReceiver.sh > /dev/null 2> /dev/null &
+
+
+# for root
+# Daily Reboot
+0 8 * * * /sbin/shutdown -r
