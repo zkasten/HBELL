@@ -1,14 +1,20 @@
 import time
 import spidev
-#from RF24 import RF24, RF24_PA_HIGH, RF24_1MBPS
+#from RF24 import RF24, RF24_PA_MAX, RF24_1MBPS
 from RF24 import RF24, RF24_PA_HIGH, RF24_250KBPS
 import sys
 import termios
 import tty
 import threading
+import socket
+import datetime
+import os
 
 # 2025-04-22 : change signal strength MAX -> HIGH
 #              change channel 75 -> 76
+
+SERVER_IP = '10.142.36.190'
+STORE_NUMBER = "001"  # 3자리 스토어 넘버 (기본값 001, 필요시 변경 가능)
 
 # SPI 설정
 spi = spidev.SpiDev()
@@ -34,20 +40,30 @@ if not nrf.begin():
     raise RuntimeError("nRF24L01 하드웨어 초기화 실패!")
 
 nrf.setPALevel(RF24_PA_HIGH)
-#nrf.setDataRate(RF24_1MBPS)
 nrf.setDataRate(RF24_250KBPS)
+
+#nrf.setPALevel(RF24_PA_MAX)
+#nrf.setDataRate(RF24_1MBPS)
 nrf.setChannel(94)
-#nrf.setChannel(80)  4/27/2025 # RF 채널을 76으로 설정 (0~125 사이 값, 기본값은 76)
+nrf.openReadingPipe(0, pipe)
+
 nrf.enableDynamicPayloads()
 nrf.setAutoAck(True)  # 자동 응답 활성화
+
 nrf.setRetries(10, 15)  # 재시도 설정 (최대 15번, 5ms 간격)
 nrf.openWritingPipe(pipe)
 nrf.stopListening()
 
-print("nRF24L01 설정 완료.")
 nrf.printDetails()
 
-STORE_NUMBER = "001"  # 3자리 스토어 넘버 (기본값 001, 필요시 변경 가능)
+# Log File Setup
+def setup_log_file():
+    cur_date = datetime.date.today()
+    log_dir = "/home/pi/log"
+    os.makedirs(log_dir, exist_ok=True) # Create log directory
+    log_file = os.path.join(log_dir, f"{cur_date}.log")
+    rcv_log_file = os.path.join(log_dir, f"rcv_{cur_date}.log")
+    return log_file, rcv_log_file
 
 def send_message(number, is_negative):
     """ 메시지를 전송하는 함수 """
@@ -72,6 +88,7 @@ original_settings = termios.tcgetattr(sys.stdin)
 
 def keypad():
     try:
+        log_file, rcv_log_file = setup_log_file()
         # cbreak 모드로 설정: 문자 단위 입력 처리, 에코 활성화
         tty.setcbreak(sys.stdin)
         buffer = ""  # 입력 숫자를 저장할 버퍼
@@ -85,6 +102,19 @@ def keypad():
                         number = int(buffer)
                         if 1 <= number <= 99999:
                             send_message(number, is_negative=False)  # "+" 형식으로 전송
+
+                            # clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            # clientsocket.connect((SERVER_IP, 8089))
+                            # # clientsocket.send(b'001,+,123')
+                            # msg = STORE_NUMBER +",+,"+ str(number)
+                            # print("send wifi:"+ msg)
+                            # clientsocket.send(msg.encode('utf-8'))
+                            # clientsocket.shutdown(socket.SHUT_RDWR)
+                            # clientsocket.close()
+                            # now = datetime.datetime.now()
+                            # ts = now.strftime("%H:%M:%S")
+                            # with open(rcv_log_file, "a") as file:
+                            #     file.write(ts +"|"+ msg + "\n")
                         else:
                             print(f"입력 범위 오류: {number}, 1에서 99999까지 입력하세요.")
                     except ValueError:
@@ -99,6 +129,19 @@ def keypad():
                         number = int(buffer)
                         if 1 <= number <= 99999:
                             send_message(number, is_negative=True)  # "-" 형식으로 즉시 전송
+
+                            # clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            # clientsocket.connect((SERVER_IP, 8089))
+                            # # clientsocket.send(b'001,+,123')
+                            # msg = STORE_NUMBER +",-,"+ str(number)
+                            # print("send wifi:"+ msg)
+                            # clientsocket.send(msg.encode('utf-8'))
+                            # clientsocket.shutdown(socket.SHUT_RDWR)
+                            # clientsocket.close()
+                            # now = datetime.datetime.now()
+                            # ts = now.strftime("%H:%M:%S")
+                            # with open(rcv_log_file, "a") as file:
+                            #     file.write(ts +"|"+ msg + "\n")
                         else:
                             print(f"입력 범위 오류: {number}, 1에서 99999까지 입력하세요.")
                     except ValueError:

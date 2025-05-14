@@ -4,6 +4,10 @@
 
 systemctl enable bellSender@tty1.service
 
+Prevent systemd from starting the getty at the same time on the same tty:
+
+systemctl mask getty@tty1.service
+
 systemctl stop bellSender@tty1.service
 
 systemctl start bellSender@tty1.service
