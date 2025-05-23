@@ -9,6 +9,11 @@ from RF24 import RF24, RF24_PA_HIGH, RF24_250KBPS
 import datetime
 import os
 
+FILE_ALIVE1 = "/home/pi/log/alive1.txt"
+FILE_ALIVE2 = "/home/pi/log/alive2.txt"
+FILE_ALIVE3 = "/home/pi/log/alive3.txt"
+FILE_ALIVE4 = "/home/pi/log/alive4.txt"
+
 # SPI Setup
 def setup_spi():
     try:
@@ -26,21 +31,38 @@ def setup_rf24():
     nrf = RF24(24, 0)
 ############################################
 #   ADDRESS                                #
-    pipe = b"\xe6\xf0\xf0\xf0\xf0"
+    pipe = b"\xe1\xf0\xf0\xf0\xf1"
 ############################################
     if not nrf.begin():
         print("nRF24L01 initialization failed! Check hardware connection.")
         raise RuntimeError("nRF24L01 hardware initialization failed!")
+
+
+############################################
+#   RF SETTING                             #
     nrf.setPALevel(RF24_PA_HIGH)
-    #nrf.setDataRate(RF24_1MBPS)
     nrf.setDataRate(RF24_250KBPS)
-    nrf.setChannel(94)
-  # nrf.setChannel(80) 4/27/2025
+    #nrf.setPALevel(RF24_PA_MAX)
+    #nrf.setDataRate(RF24_1MBPS)
+############################################
+
+############################################
+#   CHANNEL                                #
+    nrf.setChannel(110)
+############################################
+
     nrf.enableDynamicPayloads()
     nrf.setAutoAck(True)
-    nrf.openReadingPipe(1, pipe)
+    nrf.openReadingPipe(0, pipe)
     nrf.startListening()
     return nrf
+
+def touch_file(file_path):
+    try:
+        with open(file_path, 'a'):
+            os.utime(file_path, None)  # Update the timestamp
+    except Exception as e:
+        print(f"Error: File '{file_path}' not created. {e}")
 
 # Log File Setup
 def setup_log_file():
@@ -61,6 +83,16 @@ def process_data(nrf, log_file):
                     message = payload.decode('utf-8').strip()
                     print(f"Received: {message}")
                     arr = message.split(',')
+                    if arr[1] == '-' and arr[2] == '0000':
+                        # Alive Signal
+                        if arr[0] == '001':
+                            touch_file(FILE_ALIVE1)
+                        if arr[0] == '002':
+                            touch_file(FILE_ALIVE2)
+                        if arr[0] == '003':
+                            touch_file(FILE_ALIVE3)
+                        if arr[0] == '004':
+                            touch_file(FILE_ALIVE4)
                     if arr[1] == '+':
                         message = f"{arr[0]},-,{arr[2]}\n{message}"
                     with open(log_file, "a") as file:

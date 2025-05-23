@@ -15,6 +15,10 @@ import os
 
 SERVER_IP = '10.142.36.190'
 STORE_NUMBER = "001"  # 3자리 스토어 넘버 (기본값 001, 필요시 변경 가능)
+#STORE_NUMBER = "002" 
+#STORE_NUMBER = "003" 
+#STORE_NUMBER = "004" 
+ALIVE_INTERVAL = 1  # seconds
 
 # SPI 설정
 spi = spidev.SpiDev()
@@ -31,7 +35,7 @@ except IOError as e:
 nrf = RF24(24, 0)  # CE: GPIO 24, CSN: SPI 0
 ###################################################################
 #    ADDRESS                                                      #
-pipe = b"\xe6\xf0\xf0\xf0\xf0"
+pipe = b"\xe1\xf0\xf0\xf0\xf1"
 ###################################################################
 
 print("nRF24L01 초기화 시도...")
@@ -39,12 +43,19 @@ if not nrf.begin():
     print("초기화 실패: nRF24L01 모듈이 응답하지 않습니다.")
     raise RuntimeError("nRF24L01 하드웨어 초기화 실패!")
 
+###################################################################
+#    RF SETTING                                                   #
 nrf.setPALevel(RF24_PA_HIGH)
 nrf.setDataRate(RF24_250KBPS)
-
 #nrf.setPALevel(RF24_PA_MAX)
 #nrf.setDataRate(RF24_1MBPS)
-nrf.setChannel(94)
+###################################################################
+
+###################################################################
+#    CHANNEL                                                      #
+nrf.setChannel(110)
+###################################################################
+
 nrf.openReadingPipe(0, pipe)
 
 nrf.enableDynamicPayloads()
@@ -168,7 +179,7 @@ def aliveCheck():
     try:
         while True:
             send_message('0000', is_negative=True)
-            time.sleep(10)
+            time.sleep(ALIVE_INTERVAL)
 
     except KeyboardInterrupt:
         print("사용자에 의해 중지됨.")

@@ -6,15 +6,23 @@ from PyQt6.QtCore import QTimer, pyqtSignal, QObject, Qt, QFile, QIODevice, QUrl
 from PyQt6.QtGui import QFont, QCursor, QPixmap
 #from PyQt6.QtMultimedia import QSoundEffect
 import pygame
-from layout_colorwidget import Color
 import time
 
+FILE_ALIVE1 = "/home/pi/log/alive1.txt"
+FILE_ALIVE2 = "/home/pi/log/alive2.txt"
+FILE_ALIVE3 = "/home/pi/log/alive3.txt"
+FILE_ALIVE4 = "/home/pi/log/alive4.txt"
+ISALIVE1 = False
+ISALIVE2 = False
+ISALIVE3 = False
+ISALIVE4 = False
 LOG_FILE_DIR = "/home/pi/log/"
 RING_FILE = "ring.wav"
 NUM_LINES_TO_READ = 8
 UPDATE_INTERVAL_MS = 1000
 FONT_SIZE_LARGE = 100
 FONT_SIZE_SMALL = 70
+ALIVE_INTERVAL = 5 # seconds
 
 class DataUpdater(QTextEdit):
     data_updated = pyqtSignal(str)
@@ -86,6 +94,32 @@ class DataUpdater(QTextEdit):
     def update_data(self):
         self.create_empty_file_if_not_exists()
         self.clean_log_file()
+
+        if os.path.exists(FILE_ALIVE1) and os.path.exists(FILE_ALIVE2) and os.path.exists(FILE_ALIVE3) and os.path.exists(FILE_ALIVE4):
+            ############# ALIVE CHECK #############
+            global ISALIVE1, ISALIVE2, ISALIVE3, ISALIVE4
+            cur_time = int(time.time())
+            file_time1 = os.path.getmtime(FILE_ALIVE1)
+            file_time2 = os.path.getmtime(FILE_ALIVE2)
+            file_time3 = os.path.getmtime(FILE_ALIVE3)
+            file_time4 = os.path.getmtime(FILE_ALIVE4)
+
+            if cur_time - file_time1 > ALIVE_INTERVAL:
+                ISALIVE1 = False
+            else:
+                ISALIVE1 = True
+            if cur_time - file_time2 > ALIVE_INTERVAL:
+                ISALIVE2 = False
+            else:
+                ISALIVE2 = True
+            if cur_time - file_time3 > ALIVE_INTERVAL:
+                ISALIVE3 = False
+            else:
+                ISALIVE3 = True
+            if cur_time - file_time4 > ALIVE_INTERVAL:
+                ISALIVE4 = False
+            else:
+                ISALIVE4 = True
 
         file = QFile(self.filename)
         if file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
@@ -184,19 +218,6 @@ class MyWidget(QWidget):
         self.store_name4 = QLabel()
         self.store_name4.setPixmap(pixmap4)
 
-#        self.store_name1 = QLabel("Tiger\nSugar")
-#        self.store_name2 = QLabel("Saku")
-#        self.store_name3 = QLabel("Moo")
-#        #self.store_name4 = QLabel("Paik's Noodle")
-#        self.store_name1.setFont(QFont('Arial', 100))
-#        self.store_name2.setFont(QFont('Arial', 100))
-#        self.store_name3.setFont(QFont('Arial', 100))
-#        self.store_name4.setFont(QFont('Arial', 100))
-#        self.store_name1.setStyleSheet("font-weight: bold")
-#        self.store_name2.setStyleSheet("font-weight: bold")
-#        self.store_name3.setStyleSheet("font-weight: bold")
-#        self.store_name4.setStyleSheet("font-weight: bold")
-
         self.layout_store_names.addWidget(self.store_name1)
         self.layout_store_names.addWidget(self.store_name2)
         self.layout_store_names.addWidget(self.store_name3)
@@ -209,7 +230,7 @@ class MyWidget(QWidget):
         self.numLabel1_4 = QLabel("104")
         self.numLabel1_5 = QLabel("105")
         self.numLabel1_6 = QLabel("106")
-        self.numLabel1_7 = QLabel("107")
+        self.numLabel1_7 = QLabel("X")
 
         self.numLabel2_1 = QLabel("11")
         self.numLabel2_2 = QLabel("12")
@@ -217,7 +238,7 @@ class MyWidget(QWidget):
         self.numLabel2_4 = QLabel("14")
         self.numLabel2_5 = QLabel("15")
         self.numLabel2_6 = QLabel("16")
-        self.numLabel2_7 = QLabel("17")
+        self.numLabel2_7 = QLabel("X")
 
         self.numLabel3_1 = QLabel("21")
         self.numLabel3_2 = QLabel("22")
@@ -225,7 +246,7 @@ class MyWidget(QWidget):
         self.numLabel3_4 = QLabel("24")
         self.numLabel3_5 = QLabel("25")
         self.numLabel3_6 = QLabel("26")
-        self.numLabel3_7 = QLabel("27")
+        self.numLabel3_7 = QLabel("X")
 
         self.numLabel4_1 = QLabel("1")
         self.numLabel4_2 = QLabel("2")
@@ -233,7 +254,7 @@ class MyWidget(QWidget):
         self.numLabel4_4 = QLabel("4")
         self.numLabel4_5 = QLabel("5")
         self.numLabel4_6 = QLabel("6")
-        self.numLabel4_7 = QLabel("7")
+        self.numLabel4_7 = QLabel("X")
 
         self.numLabel1_1.setFont(QFont('Arial', FONT_SIZE_LARGE))
         self.numLabel1_2.setFont(QFont('Arial', FONT_SIZE_LARGE))
@@ -270,15 +291,19 @@ class MyWidget(QWidget):
         self.numLabel1_1.setStyleSheet("color: red; font-weight: bold")
         self.numLabel1_2.setStyleSheet("font-weight: bold")
         self.numLabel1_3.setStyleSheet("font-weight: bold")
+        self.numLabel1_7.setStyleSheet("color: red")
         self.numLabel2_1.setStyleSheet("color: red; font-weight: bold")
         self.numLabel2_2.setStyleSheet("font-weight: bold")
         self.numLabel2_3.setStyleSheet("font-weight: bold")
+        self.numLabel2_7.setStyleSheet("color: red")
         self.numLabel3_1.setStyleSheet("color: red; font-weight: bold")
         self.numLabel3_2.setStyleSheet("font-weight: bold")
         self.numLabel3_3.setStyleSheet("font-weight: bold")
+        self.numLabel3_7.setStyleSheet("color: red")
         self.numLabel4_1.setStyleSheet("color: red; font-weight: bold")
         self.numLabel4_2.setStyleSheet("font-weight: bold")
         self.numLabel4_3.setStyleSheet("font-weight: bold")
+        self.numLabel4_7.setStyleSheet("color: red")
 
         self.layout_numline1_2_1.addWidget(self.numLabel1_4, alignment=Qt.AlignmentFlag.AlignHCenter)
         self.layout_numline1_2_1.addWidget(self.numLabel1_5, alignment=Qt.AlignmentFlag.AlignHCenter)
@@ -369,16 +394,12 @@ class MyWidget(QWidget):
                 store4.append(i.split(',')[2])
 
         while len(store1) < 8:
-            #store1.insert(0, " ")
             store1.append(" ")
         while len(store2) < 8:
-            #store2.insert(0, " ")
             store2.append(" ")
         while len(store3) < 8:
-            #store3.insert(0, " ")
             store3.append(" ")
         while len(store4) < 8:
-            #store4.insert(0, " ")  
             store4.append(" ")
 
         # self.showFullScreen()
@@ -389,7 +410,13 @@ class MyWidget(QWidget):
         self.numLabel1_4.setText(store1[3])
         self.numLabel1_5.setText(store1[4])
         self.numLabel1_6.setText(store1[5])
-        self.numLabel1_7.setText(store1[6])
+
+        if ISALIVE1:
+            self.numLabel1_7.setText(store1[6])
+            self.numLabel1_7.setStyleSheet("color: black")
+        else:
+            self.numLabel1_7.setText("X")
+            self.numLabel1_7.setStyleSheet("color: red")
 
         self.numLabel2_1.setText(store2[0])
         self.numLabel2_2.setText(store2[1])
@@ -397,7 +424,13 @@ class MyWidget(QWidget):
         self.numLabel2_4.setText(store2[3])
         self.numLabel2_5.setText(store2[4])
         self.numLabel2_6.setText(store2[5])
-        self.numLabel2_7.setText(store2[6])
+
+        if ISALIVE2:
+            self.numLabel2_7.setText(store2[6])
+            self.numLabel2_7.setStyleSheet("color: black")
+        else:
+            self.numLabel2_7.setText("X")
+            self.numLabel2_7.setStyleSheet("color: red")
 
         self.numLabel3_1.setText(store3[0])
         self.numLabel3_2.setText(store3[1])
@@ -405,7 +438,12 @@ class MyWidget(QWidget):
         self.numLabel3_4.setText(store3[3])
         self.numLabel3_5.setText(store3[4])
         self.numLabel3_6.setText(store3[5])
-        self.numLabel3_7.setText(store3[6])
+        if ISALIVE3:
+            self.numLabel3_7.setText(store3[6])
+            self.numLabel3_7.setStyleSheet("color: black")
+        else:
+            self.numLabel3_7.setText("X")
+            self.numLabel3_7.setStyleSheet("color: red")
 
         self.numLabel4_1.setText(store4[0])
         self.numLabel4_2.setText(store4[1])
@@ -413,62 +451,23 @@ class MyWidget(QWidget):
         self.numLabel4_4.setText(store4[3])
         self.numLabel4_5.setText(store4[4])
         self.numLabel4_6.setText(store4[5])
-        self.numLabel4_7.setText(store4[6])
+        if ISALIVE4:
+            self.numLabel4_7.setText(store4[6])
+            self.numLabel4_7.setStyleSheet("color: black")
+        else:
+            self.numLabel4_7.setText("X")
+            self.numLabel4_7.setStyleSheet("color: red")
 
-
-
-        # self.label1.setText(self.getNumber(arr[0].split(',')[0]) +" "+ self.getNumber(arr[0].split(',')[2]))
-        # self.label2.setText(self.getNumber(arr[1].split(',')[0]) +" "+ self.getNumber(arr[1].split(',')[2]))
-        # self.label3.setText(self.getNumber(arr[2].split(',')[0]) +" "+ self.getNumber(arr[2].split(',')[2]))
-        # self.label4.setText(self.getNumber(arr[3].split(',')[0]) +" "+ self.getNumber(arr[3].split(',')[2]))
-        # self.label5.setText(self.getNumber(arr[4].split(',')[0]) +" "+ self.getNumber(arr[4].split(',')[2]))
-        # self.label1.setText("Tiger Sugar"+ self.getNumber(arr[5].split(',')[2]))
-        # self.label2.setText("Moobongri"+ self.getNumber(arr[6].split(',')[2]))
-        # self.label3.setText("Paik's Noodle"+ self.getNumber(arr[7].split(',')[2]))
-        # self.label1.setText("Tiger\nSugar")
-        # self.label2.setText("Saku")
-        # self.label3.setText("Moo")
-        # # self.label4.setText("Paik's Noodle")
-        # pixmap = QPixmap('paiks.png')
-        # self.label4.setPixmap(pixmap)
-
-        # # self.label1_1.setText("12 13 14")
-        # self.label1_1_1.setText("12")
-        # self.label1_1_2.setText("13")
-        # self.label1_1_3.setText("14")
-        # self.label2_1.setText("22 23 24")
-        # self.label3_1.setText("98 99 100")
-        # self.label4_1.setText("3 4 5")
-
-        # # self.label1_2.setText("112 113 114 115 116")
-        # self.label1_2_1.setText("112")
-        # self.label1_2_2.setText("113")
-        # self.label1_2_3.setText("114")
-        # self.label1_2_4.setText("115")
-        # self.label1_2_5.setText("116")
-        # self.label2_2.setText("122 123 124 125 126")
-        # self.label3_2.setText("2 3 4 100 21")
-        # self.label4_2.setText("13")
-
-        # self.label1.setText(self.getNumber(arr[0].split(',')[0]) +" "+ self.getNumber(arr[0].split(',')[2]))
-        # self.label2.setText(self.getNumber(arr[1].split(',')[0]) +" "+ self.getNumber(arr[1].split(',')[2]))
-        # self.label3.setText(self.getNumber(arr[2].split(',')[0]) +" "+ self.getNumber(arr[2].split(',')[2]))
-        # self.label4.setText(self.getNumber(arr[3].split(',')[0]) +" "+ self.getNumber(arr[3].split(',')[2]))
-        # self.label5.setText(self.getNumber(arr[4].split(',')[0]) +" "+ self.getNumber(arr[4].split(',')[2]))
-        # self.label6.setText(self.getNumber(arr[5].split(',')[0]) +" "+ self.getNumber(arr[5].split(',')[2]))
-        # self.label7.setText(self.getNumber(arr[6].split(',')[0]) +" "+ self.getNumber(arr[6].split(',')[2]))
-        # if self.getNumber(arr[7].split(',')[0]) != "000":
-        #     print("----------!--000")
-        #     self.label8.setText(self.getNumber(arr[7].split(',')[2]))
-        # else:
-        #     print("------------000")
-        #     self.label8.setText(self.getNumber(arr[7].split(',')[0]) +" "+ self.getNumber(arr[7].split(',')[2]))
+        #self.showFullScreen()
+        self.setGeometry(0, 0, 1920, 1080)
+        self.label.resize(self.pixmap.width(), self.pixmap.height())
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
 
     widget = MyWidget("cur_num.csv")
     widget.setCursor(QCursor(Qt.CursorShape.BlankCursor))
+    # widget.setStyleSheet("background-color: red;")
 
     widget.showFullScreen()
 

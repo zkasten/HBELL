@@ -8,7 +8,7 @@ from PyQt6.QtGui import QFont, QCursor, QPixmap
 import pygame
 import time
 
-FILE_ALIVE = "/home/pi/log/alive.txt"
+FILE_ALIVE = "/home/pi/log/alive1.txt"
 ISALIVE = True
 LOG_FILE_DIR = "/home/pi/log/"
 RING_FILE = "ring.wav"
@@ -16,6 +16,7 @@ NUM_LINES_TO_READ = 8
 UPDATE_INTERVAL_MS = 1000
 FONT_SIZE_LARGE = 180
 FONT_SIZE_SMALL = 120
+ALIVE_INTERVAL = 5 # seconds
 
 class DataUpdater(QTextEdit):
     data_updated = pyqtSignal(str)
@@ -91,7 +92,7 @@ class DataUpdater(QTextEdit):
             global ISALIVE
             cur_time = int(time.time())
             file_time = os.path.getmtime(FILE_ALIVE)
-            if cur_time - file_time > 30:
+            if cur_time - file_time > ALIVE_INTERVAL:
                 ISALIVE = False
             else:
                 ISALIVE = True
@@ -158,11 +159,6 @@ class MyWidget(QWidget):
 
         self.filename = filename
         self.data_updater = DataUpdater(filename)
-
-#        pixmap = QPixmap("logo.png")
-#        self.logo_label = QLabel()
-#        self.logo_label.setPixmap(pixmap)
-#        self.layout.addWidget(self.logo_label)
 
         self.label1 = QLabel("")
         self.label2 = QLabel("")
