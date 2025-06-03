@@ -7,6 +7,9 @@ from PyQt6.QtGui import QFont, QCursor, QPixmap
 #from PyQt6.QtMultimedia import QSoundEffect
 import pygame
 import time
+import psutil
+
+# 2025-05-27 : add is_file_open - Hyukjoo
 
 FILE_ALIVE1 = "/home/pi/log/alive1.txt"
 FILE_ALIVE2 = "/home/pi/log/alive2.txt"
@@ -39,6 +42,16 @@ class DataUpdater(QTextEdit):
         pygame.mixer.init()
         self.sound = pygame.mixer.Sound(RING_FILE)
 
+    def is_file_open(self, file_path):
+        for proc in psutil.process_iter(['pid', 'open_files']):
+            try:
+                for file in proc.info['open_files'] or []:
+                    if file.path == file_path:
+                        return True
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        return False
+
     def play_sound(self):
 #        sound = QSoundEffect(QApplication.instance())
 #        sound.setSource(QUrl.fromLocalFile(RING_FILE))
@@ -63,17 +76,22 @@ class DataUpdater(QTextEdit):
         except FileNotFoundError:
             return f"Error: File '{log_file}' not found."
 
-        delItems = {}
-        for i in reversed(lines):
-            lineArr = i.split(",")
-            if lineArr[1] == '-':
-                delItems[lineArr[2]] = lineArr[0]
-                lines.remove(i)
-            else:
-                if lineArr[2] in delItems and lineArr[0] == delItems[lineArr[2]]:
-                    lines.remove(i)
-        
+        while self.is_file_open(log_file):
+            time.sleep(0.01)  # Wait until the file is not open by another process
+
         with open(log_file, "w") as num_file:
+            delItems = {}
+            for i in reversed(lines):
+                lineArr = i.split(",")
+                if len(lineArr) < 3:
+                    lines.remove(i)
+
+                if lineArr[1] == '-':
+                    delItems[lineArr[2]] = lineArr[0]
+                    lines.remove(i)
+                else:
+                    if lineArr[2] in delItems and lineArr[0] == delItems[lineArr[2]]:
+                        lines.remove(i)
             num_file.writelines(lines)
 
     def read_last_lines(self, num_lines=NUM_LINES_TO_READ):
@@ -135,19 +153,12 @@ class DataUpdater(QTextEdit):
             encoded_string = i.encode('utf-8')
             log_b_arr.append(QByteArray(encoded_string))
 
-        # print("LOG:"+ str(log_b_arr))
-        # print("TXT:"+ str(text))
-        # print("MEM:"+ str(self.curTxt))
-
         if text != log_b_arr:
             # print("-------------------DIFF btw LOG & CUR------")
             self.play_sound()
 
             text = log_b_arr
             self.curTxt = log_b_arr
-            # print("text type:"+ str(type(text)))
-            # print("log_b_arr type:"+ str(type(log_b_arr)))
-            # print(str(log_b_arr))
 
             file = QFile(self.filename)
             if not file.open(QIODevice.OpenModeFlag.WriteOnly):

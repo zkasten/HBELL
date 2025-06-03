@@ -8,6 +8,11 @@ import spidev
 from RF24 import RF24, RF24_PA_HIGH, RF24_250KBPS
 import datetime
 import os
+import psutil
+import queue
+
+# 2025-05-27 : add is_file_open - Hyukjoo
+# 2025-05-30 : move setup_log_file() to while loop - Hyukjoo
 
 FILE_ALIVE1 = "/home/pi/log/alive1.txt"
 FILE_ALIVE2 = "/home/pi/log/alive2.txt"
@@ -57,6 +62,16 @@ def setup_rf24():
     nrf.startListening()
     return nrf
 
+def is_file_open(file_path):
+    for proc in psutil.process_iter(['pid', 'open_files']):
+        try:
+            for file in proc.info['open_files'] or []:
+                if file.path == file_path:
+                    return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+    return False
+
 def touch_file(file_path):
     try:
         with open(file_path, 'a'):
@@ -73,41 +88,83 @@ def setup_log_file():
     return log_file
 
 # Data Processing and Logging
-def process_data(nrf, log_file):
+def process_data(nrf):
+    q = queue.Queue()
     while True:
+        log_file = setup_log_file()
         if nrf.available():
+            print("Data available from nRF24L01")
             payload_size = nrf.getDynamicPayloadSize()
+            print(f"Payload size: {payload_size}")
             if payload_size > 0:
                 payload = nrf.read(payload_size)
                 try:
                     message = payload.decode('utf-8').strip()
                     print(f"Received: {message}")
                     arr = message.split(',')
-                    if arr[1] == '-' and arr[2] == '0000':
-                        # Alive Signal
-                        if arr[0] == '001':
-                            touch_file(FILE_ALIVE1)
-                        if arr[0] == '002':
-                            touch_file(FILE_ALIVE2)
-                        if arr[0] == '003':
-                            touch_file(FILE_ALIVE3)
-                        if arr[0] == '004':
-                            touch_file(FILE_ALIVE4)
+                    if len(arr) < 3:
+                        print(f"Invalid message format: {message}")
+                        continue
+
+                    if arr[1] == '-':
+                        if arr[2] == '0000':
+                            # Alive Signal
+                            if arr[0] == '001':
+                                touch_file(FILE_ALIVE1)
+                            if arr[0] == '002':
+                                touch_file(FILE_ALIVE2)
+                            if arr[0] == '003':
+                                touch_file(FILE_ALIVE3)
+                            if arr[0] == '004':
+                                touch_file(FILE_ALIVE4)
+                            continue
+                        message = f"{message}"
+                        q.put(message)
                     if arr[1] == '+':
                         message = f"{arr[0]},-,{arr[2]}\n{message}"
-                    with open(log_file, "a") as file:
-                        file.write(message + "\n")
+                        q.put(message)
+
+                    print("----------------------")
+                    if is_file_open(log_file):
+                        #time.sleep(0.01)
+                        print(f"--WAIT for file to be closed: {log_file}")
+                        continue
+                    else:
+                        print(f"Writing to log file: {log_file}")
+
+                        with open(log_file, "a") as file:
+                            #file.write(message + "\n")
+                            print("Q size:", str(q.qsize()))
+                            while not q.empty():
+                                print("write======"+ str(q.qsize()))
+                                #msg = q.get()
+                                #print("msg:", msg)
+                                file.write(q.get() + "\n")
+                                #file.write(msg + "\n")
+#                            file.flush()
+#                            print("1======================")
+#                        print("2======================")
+#                    print("3======================")
+
                 except UnicodeDecodeError:
                     print(f"Received invalid data: {payload}")
+
+#                print("4======================")
+#            print("5======================")
+        else:
+#            print("No data available from nRF24L01")
+            time.sleep(0.1)  # Sleep to avoid busy waiting
+            continue
+
         time.sleep(0.01)
+    print("7======================")
 
 if __name__ == "__main__":
     setup_spi()
     nrf = setup_rf24()
-    log_file = setup_log_file()
     print("Starting to receive data...")
     try:
-        process_data(nrf, log_file)
+        process_data(nrf)
     except KeyboardInterrupt:
         print("Stopped by user")
     finally:

@@ -18,7 +18,7 @@ STORE_NUMBER = "001"  # 3자리 스토어 넘버 (기본값 001, 필요시 변�
 #STORE_NUMBER = "002" 
 #STORE_NUMBER = "003" 
 #STORE_NUMBER = "004" 
-ALIVE_INTERVAL = 1  # seconds
+ALIVE_INTERVAL = 5  # seconds
 
 # SPI 설정
 spi = spidev.SpiDev()
@@ -188,13 +188,33 @@ def aliveCheck():
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, original_settings)
         nrf.powerDown()
     
+def stressTest():
+    try:
+        i = 0
+        while True:
+            send_message(str(i), is_negative=False)
+            time.sleep(5)
+            if i == 9999:
+                i = 0
+            i+= 1
+
+    except KeyboardInterrupt:
+        print("사용자에 의해 중지됨.")
+    finally:
+        # 터미널 설정 복원 및 nRF24L01 종료
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, original_settings)
+        nrf.powerDown()
+
 thread1 = threading.Thread(target=keypad, args=())
 thread2 = threading.Thread(target=aliveCheck, args=())
+thread3 = threading.Thread(target=stressTest, args=())
 
 thread1.start()
 thread2.start()
+thread3.start()
 
 thread1.join()
 thread2.join()
+thread3.join()
 
 
