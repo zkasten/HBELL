@@ -7,8 +7,25 @@ from PyQt6.QtGui import QFont, QCursor, QPixmap
 #from PyQt6.QtMultimedia import QSoundEffect
 import pygame
 import time
+import configparser
+
+# 2025-06-06 : Add configparser - Hyukjoo
+
+config = configparser.ConfigParser()
+config.read('/home/pi/hbell.cfg')
+            
+STORE_NUMBER = config['STORE']['ADDRESS']
 
 FILE_ALIVE = "/home/pi/log/alive1.txt"
+if STORE_NUMBER == "001":
+    FILE_ALIVE = "/home/pi/log/alive1.txt"
+elif STORE_NUMBER == "002":
+    FILE_ALIVE = "/home/pi/log/alive2.txt"
+elif STORE_NUMBER == "003":
+    FILE_ALIVE = "/home/pi/log/alive3.txt"
+elif STORE_NUMBER == "004":
+    FILE_ALIVE = "/home/pi/log/alive4.txt"
+
 ISALIVE = True
 LOG_FILE_DIR = "/home/pi/log/"
 RING_FILE = "ring.wav"
@@ -82,7 +99,8 @@ class DataUpdater(QTextEdit):
             lines.append(stream.readLine())
         file.close()
 
-        return lines[-8:]
+        #return lines[-8:]
+        return lines
 
     def update_data(self):
         self.create_empty_file_if_not_exists()
@@ -109,9 +127,13 @@ class DataUpdater(QTextEdit):
         log = self.read_last_lines()
         log_b_arr = QByteArray()
         for i in log:
-            i += "\n"
-            encoded_string = i.encode('utf-8')
-            log_b_arr.append(QByteArray(encoded_string))
+            print(i.split(',')[0]+ " :: " + STORE_NUMBER)
+
+            if i.split(',')[0] == STORE_NUMBER:
+                i += "\n"
+                encoded_string = i.encode('utf-8')
+                print("encoded_string:"+ str(encoded_string))
+                log_b_arr.append(QByteArray(encoded_string))
 
         # print("LOG:"+ str(log_b_arr))
         # print("TXT:"+ str(text))
@@ -131,6 +153,11 @@ class DataUpdater(QTextEdit):
             if not file.open(QIODevice.OpenModeFlag.WriteOnly):
                 return
 
+#            for i in range(len(log_b_arr)):
+#                if log_b_arr[i] == b'':
+#                    print("---BLANK---!!!")
+#                elif log_b_arr[i] == '':
+#                    print("---NEWLINE---!!!")
             dataStream = QTextStream(file)
             dataStream << log_b_arr
             file.close()
@@ -227,20 +254,26 @@ class MyWidget(QWidget):
     
     def update_text(self, new_text):
         arr = new_text.split('\n')
-        # print("LEN:"+ str(len(arr)))
         while len(arr) < 9:
             arr.insert(0, "000,+, ")
-        # print(arr)
-        self.showFullScreen()
+        
+        self.label1.setText(arr[len(arr)-9].split(',')[2])
+        self.label2.setText(arr[len(arr)-8].split(',')[2])
+        self.label3.setText(arr[len(arr)-7].split(',')[2])
+        self.label4.setText(arr[len(arr)-6].split(',')[2])
+        self.label5.setText(arr[len(arr)-5].split(',')[2])
+        self.label6.setText(arr[len(arr)-4].split(',')[2])
+        self.label7.setText(arr[len(arr)-3].split(',')[2])
+        self.label8.setText(arr[len(arr)-2].split(',')[2])
 
-        self.label1.setText(self.getNumber(arr[0].split(',')[2]))
-        self.label2.setText(self.getNumber(arr[1].split(',')[2]))
-        self.label3.setText(self.getNumber(arr[2].split(',')[2]))
-        self.label4.setText(self.getNumber(arr[3].split(',')[2]))
-        self.label5.setText(self.getNumber(arr[4].split(',')[2]))
-        self.label6.setText(self.getNumber(arr[5].split(',')[2]))
-        self.label7.setText(self.getNumber(arr[6].split(',')[2]))
-        self.label8.setText(self.getNumber(arr[7].split(',')[2]))
+#        self.label1.setText(self.getNumber(arr[len(arr)-1].split(',')[2]))
+#        self.label2.setText(self.getNumber(arr[1].split(',')[2]))
+#        self.label3.setText(self.getNumber(arr[2].split(',')[2]))
+#        self.label4.setText(self.getNumber(arr[3].split(',')[2]))
+#        self.label5.setText(self.getNumber(arr[4].split(',')[2]))
+#        self.label6.setText(self.getNumber(arr[5].split(',')[2]))
+#        self.label7.setText(self.getNumber(arr[6].split(',')[2]))
+#        self.label8.setText(self.getNumber(arr[7].split(',')[2]))
 #        self.setStyleSheet("background-color: grey;")
 
         if ISALIVE:
@@ -248,20 +281,13 @@ class MyWidget(QWidget):
         else:
             self.pixmap = QPixmap("backgroundS_err.png")
         self.label.setPixmap(self.pixmap)
-        #self.showFullScreen()
+        self.showFullScreen()
+
 #        self.setGeometry(0, 0, 1920, 1080)
 #        self.label.resize(self.pixmap.width(), self.pixmap.height())
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-
-#    sound = QSoundEffect(QApplication.instance())
-#    sound.setSource(QUrl.fromLocalFile(RING_FILE))
-#    sound.play()
-#    pygame.mixer.init()
-#    sound = pygame.mixer.Sound("ring.wav")
-#    sound.play()
-#    time.sleep(sound.get_length())
 
     widget = MyWidget("cur_num.csv")
     widget.setCursor(QCursor(Qt.CursorShape.BlankCursor))

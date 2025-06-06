@@ -10,9 +10,15 @@ import datetime
 import os
 import psutil
 import queue
+import configparser
 
-# 2025-05-27 : add is_file_open - Hyukjoo
+# 2025-06-06 : Add configparser - Hyukjoo
 # 2025-05-30 : move setup_log_file() to while loop - Hyukjoo
+# 2025-05-27 : add is_file_open - Hyukjoo
+
+config = configparser.ConfigParser()
+config.read('/home/pi/hbell.cfg')
+
 
 FILE_ALIVE1 = "/home/pi/log/alive1.txt"
 FILE_ALIVE2 = "/home/pi/log/alive2.txt"
@@ -24,7 +30,7 @@ def setup_spi():
     try:
         spi = spidev.SpiDev()
         spi.open(0, 0)
-        spi.max_speed_hz = 2000000  # 2MHz
+        spi.max_speed_hz = int(config['NRF24']['SPI_SPEED'])
         spi.close()
         print("SPI device access successful: /dev/spidev0.0")
     except IOError as e:
@@ -36,7 +42,8 @@ def setup_rf24():
     nrf = RF24(24, 0)
 ############################################
 #   ADDRESS                                #
-    pipe = b"\xe1\xf0\xf0\xf0\xf1"
+    #pipe = b"\xe1\xf0\xf0\xf0\xf1"
+    pipe = config['NRF24']['PIPE'].encode('utf-8')
 ############################################
     if not nrf.begin():
         print("nRF24L01 initialization failed! Check hardware connection.")
@@ -53,7 +60,7 @@ def setup_rf24():
 
 ############################################
 #   CHANNEL                                #
-    nrf.setChannel(110)
+    nrf.setChannel(int(config['NRF24']['CHANNEL']))
 ############################################
 
     nrf.enableDynamicPayloads()
@@ -124,7 +131,6 @@ def process_data(nrf):
                         message = f"{arr[0]},-,{arr[2]}\n{message}"
                         q.put(message)
 
-                    print("----------------------")
                     if is_file_open(log_file):
                         #time.sleep(0.01)
                         print(f"--WAIT for file to be closed: {log_file}")
@@ -142,22 +148,16 @@ def process_data(nrf):
                                 file.write(q.get() + "\n")
                                 #file.write(msg + "\n")
 #                            file.flush()
-#                            print("1======================")
-#                        print("2======================")
-#                    print("3======================")
 
                 except UnicodeDecodeError:
                     print(f"Received invalid data: {payload}")
 
-#                print("4======================")
-#            print("5======================")
         else:
 #            print("No data available from nRF24L01")
             time.sleep(0.1)  # Sleep to avoid busy waiting
             continue
 
         time.sleep(0.01)
-    print("7======================")
 
 if __name__ == "__main__":
     setup_spi()

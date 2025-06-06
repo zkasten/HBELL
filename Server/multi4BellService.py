@@ -241,7 +241,7 @@ class MyWidget(QWidget):
         self.numLabel1_4 = QLabel("104")
         self.numLabel1_5 = QLabel("105")
         self.numLabel1_6 = QLabel("106")
-        self.numLabel1_7 = QLabel("X")
+        self.numLabel1_7 = QLabel("*")
 
         self.numLabel2_1 = QLabel("11")
         self.numLabel2_2 = QLabel("12")
@@ -249,7 +249,7 @@ class MyWidget(QWidget):
         self.numLabel2_4 = QLabel("14")
         self.numLabel2_5 = QLabel("15")
         self.numLabel2_6 = QLabel("16")
-        self.numLabel2_7 = QLabel("X")
+        self.numLabel2_7 = QLabel("*")
 
         self.numLabel3_1 = QLabel("21")
         self.numLabel3_2 = QLabel("22")
@@ -257,7 +257,7 @@ class MyWidget(QWidget):
         self.numLabel3_4 = QLabel("24")
         self.numLabel3_5 = QLabel("25")
         self.numLabel3_6 = QLabel("26")
-        self.numLabel3_7 = QLabel("X")
+        self.numLabel3_7 = QLabel("*")
 
         self.numLabel4_1 = QLabel("1")
         self.numLabel4_2 = QLabel("2")
@@ -265,7 +265,7 @@ class MyWidget(QWidget):
         self.numLabel4_4 = QLabel("4")
         self.numLabel4_5 = QLabel("5")
         self.numLabel4_6 = QLabel("6")
-        self.numLabel4_7 = QLabel("X")
+        self.numLabel4_7 = QLabel("*")
 
         self.numLabel1_1.setFont(QFont('Arial', FONT_SIZE_LARGE))
         self.numLabel1_2.setFont(QFont('Arial', FONT_SIZE_LARGE))
@@ -426,7 +426,7 @@ class MyWidget(QWidget):
             self.numLabel1_7.setText(store1[6])
             self.numLabel1_7.setStyleSheet("color: black")
         else:
-            self.numLabel1_7.setText("X")
+            self.numLabel1_7.setText("*")
             self.numLabel1_7.setStyleSheet("color: red")
 
         self.numLabel2_1.setText(store2[0])
@@ -440,7 +440,7 @@ class MyWidget(QWidget):
             self.numLabel2_7.setText(store2[6])
             self.numLabel2_7.setStyleSheet("color: black")
         else:
-            self.numLabel2_7.setText("X")
+            self.numLabel2_7.setText("*")
             self.numLabel2_7.setStyleSheet("color: red")
 
         self.numLabel3_1.setText(store3[0])
@@ -453,7 +453,7 @@ class MyWidget(QWidget):
             self.numLabel3_7.setText(store3[6])
             self.numLabel3_7.setStyleSheet("color: black")
         else:
-            self.numLabel3_7.setText("X")
+            self.numLabel3_7.setText("*")
             self.numLabel3_7.setStyleSheet("color: red")
 
         self.numLabel4_1.setText(store4[0])
@@ -466,10 +466,10 @@ class MyWidget(QWidget):
             self.numLabel4_7.setText(store4[6])
             self.numLabel4_7.setStyleSheet("color: black")
         else:
-            self.numLabel4_7.setText("X")
+            self.numLabel4_7.setText("*")
             self.numLabel4_7.setStyleSheet("color: red")
 
-        #self.showFullScreen()
+        self.showFullScreen()
         self.setGeometry(0, 0, 1920, 1080)
         self.label.resize(self.pixmap.width(), self.pixmap.height())
 

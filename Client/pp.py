@@ -9,22 +9,25 @@ import threading
 import socket
 import datetime
 import os
+import configparser
 
+# 2025-06-05 : add configparser - Hyukjoo
 # 2025-04-22 : change signal strength MAX -> HIGH
 #              change channel 75 -> 76
 
+config = configparser.ConfigParser()
+config.read('/home/pi/hbell.cfg')
+
 SERVER_IP = '10.142.36.190'
-STORE_NUMBER = "001"  # 3자리 스토어 넘버 (기본값 001, 필요시 변경 가능)
-#STORE_NUMBER = "002" 
-#STORE_NUMBER = "003" 
-#STORE_NUMBER = "004" 
-ALIVE_INTERVAL = 5  # seconds
+
+STORE_NUMBER = config['STORE']['ADDRESS']
+ALIVE_INTERVAL = int(config['NRF24']['ALIVE_INTERVAL'])
 
 # SPI 설정
 spi = spidev.SpiDev()
 try:
     spi.open(0, 0)
-    spi.max_speed_hz = 2000000  # 2MHz 설정 (안정성 확보)
+    spi.max_speed_hz = int(config['NRF24']['SPI_SPEED'])
     spi.close()
     print("SPI 장치 접근 성공: /dev/spidev0.0")
 except IOError as e:
@@ -35,7 +38,8 @@ except IOError as e:
 nrf = RF24(24, 0)  # CE: GPIO 24, CSN: SPI 0
 ###################################################################
 #    ADDRESS                                                      #
-pipe = b"\xe1\xf0\xf0\xf0\xf1"
+pipe = config['NRF24']['PIPE'].encode('utf-8') 
+#pipe = config['NRF24']['ADDRESS']
 ###################################################################
 
 print("nRF24L01 초기화 시도...")
@@ -47,13 +51,15 @@ if not nrf.begin():
 #    RF SETTING                                                   #
 nrf.setPALevel(RF24_PA_HIGH)
 nrf.setDataRate(RF24_250KBPS)
+#nrf.setPALevel(config['NRF24']['PA_LEVEL'])
+#nrf.setDataRate(config['NRF24']['DATA_RATE'])
 #nrf.setPALevel(RF24_PA_MAX)
 #nrf.setDataRate(RF24_1MBPS)
 ###################################################################
 
 ###################################################################
 #    CHANNEL                                                      #
-nrf.setChannel(110)
+nrf.setChannel(int(config['NRF24']['CHANNEL']))
 ###################################################################
 
 nrf.openReadingPipe(0, pipe)
@@ -61,7 +67,7 @@ nrf.openReadingPipe(0, pipe)
 nrf.enableDynamicPayloads()
 nrf.setAutoAck(True)  # 자동 응답 활성화
 
-nrf.setRetries(10, 15)  # 재시도 설정 (최대 15번, 5ms 간격)
+nrf.setRetries(int(config['NRF24']['RETRY_CNT']), int(config['NRF24']['RETRY_INTERVAL']))
 nrf.openWritingPipe(pipe)
 nrf.stopListening()
 
@@ -193,7 +199,7 @@ def stressTest():
         i = 0
         while True:
             send_message(str(i), is_negative=False)
-            time.sleep(5)
+            time.sleep(1)
             if i == 9999:
                 i = 0
             i+= 1
@@ -207,14 +213,14 @@ def stressTest():
 
 thread1 = threading.Thread(target=keypad, args=())
 thread2 = threading.Thread(target=aliveCheck, args=())
-thread3 = threading.Thread(target=stressTest, args=())
+#thread3 = threading.Thread(target=stressTest, args=())
 
 thread1.start()
 thread2.start()
-thread3.start()
+#thread3.start()
 
 thread1.join()
 thread2.join()
-thread3.join()
+#thread3.join()
 
 
