@@ -8,7 +8,9 @@ from PyQt6.QtGui import QFont, QCursor, QPixmap
 import pygame
 import time
 import configparser
+import psutil
 
+# 2025-06-25 : Add number validation check, Add is_file_open() - Hyukjoo
 # 2025-06-06 : Add configparser - Hyukjoo
 
 config = configparser.ConfigParser()
@@ -55,6 +57,16 @@ class DataUpdater(QTextEdit):
 #        sound.setSource(QUrl.fromLocalFile(RING_FILE))
         self.sound.play()
 
+    def is_file_open(self, file_path):
+        for proc in psutil.process_iter(['pid', 'open_files']):
+            try:
+                for file in proc.info['open_files'] or []:
+                    if file.path == file_path:
+                        return True
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        return False
+    
     def create_empty_file_if_not_exists(self):
         log_file = LOG_FILE_DIR + str(datetime.date.today()) + ".log"
 
@@ -74,19 +86,25 @@ class DataUpdater(QTextEdit):
         except FileNotFoundError:
             return f"Error: File '{log_file}' not found."
 
-        delItems = {}
-        for i in reversed(lines):
-            lineArr = i.split(",")
-            if lineArr[1] == '-':
-                delItems[lineArr[2]] = lineArr[0]
-                lines.remove(i)
-            else:
-                if lineArr[2] in delItems and lineArr[0] == delItems[lineArr[2]]:
-                    lines.remove(i)
-        
+        while self.is_file_open(log_file):
+            time.sleep(0.01)  # Wait until the file is not open by another process
+            
         with open(log_file, "w") as num_file:
-            num_file.writelines(lines)
+            delItems = {}
+            for i in reversed(lines):
+                lineArr = i.split(",")
+                if len(lineArr) < 3:
+                    lines.remove(i)
+                    continue
 
+                if lineArr[1] == '-':
+                    delItems[lineArr[2]] = lineArr[0]
+                    lines.remove(i)
+                else:
+                    if lineArr[2] in delItems and lineArr[0] == delItems[lineArr[2]]:
+                        lines.remove(i)
+            num_file.writelines(lines)
+                                
     def read_last_lines(self, num_lines=NUM_LINES_TO_READ):
         log_file = LOG_FILE_DIR + str(datetime.date.today()) + ".log"
         file = QFile(log_file)
