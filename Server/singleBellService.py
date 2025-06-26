@@ -35,7 +35,7 @@ NUM_LINES_TO_READ = 8
 UPDATE_INTERVAL_MS = 1000
 FONT_SIZE_LARGE = 180
 FONT_SIZE_SMALL = 120
-ALIVE_INTERVAL = 5 # seconds
+ALIVE_INTERVAL = 7 # seconds
 
 class DataUpdater(QTextEdit):
     data_updated = pyqtSignal(str)
@@ -93,15 +93,26 @@ class DataUpdater(QTextEdit):
             delItems = {}
             for i in reversed(lines):
                 lineArr = i.split(",")
+                print(lineArr)
                 if len(lineArr) < 3:
+                    print("remove1")
                     lines.remove(i)
                     continue
-
+                if not lineArr[0].isdigit():
+                    print("remove2")
+                    lines.remove(i)
+                    continue
+                if not lineArr[2].replace('\n','').isdigit():
+                    print("remove3")
+                    lines.remove(i)
+                    continue
                 if lineArr[1] == '-':
+                    print("remove-")
                     delItems[lineArr[2]] = lineArr[0]
                     lines.remove(i)
                 else:
                     if lineArr[2] in delItems and lineArr[0] == delItems[lineArr[2]]:
+                        print("remove-else")
                         lines.remove(i)
             num_file.writelines(lines)
                                 

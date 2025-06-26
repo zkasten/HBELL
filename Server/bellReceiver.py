@@ -19,6 +19,7 @@ import configparser
 config = configparser.ConfigParser()
 config.read('/home/pi/hbell.cfg')
 
+STORE_NUMBER = config['STORE']['ADDRESS']
 
 FILE_ALIVE1 = "/home/pi/log/alive1.txt"
 FILE_ALIVE2 = "/home/pi/log/alive2.txt"
@@ -112,6 +113,11 @@ def process_data(nrf):
                     if len(arr) < 3:
                         print(f"Invalid message format: {message}")
                         continue
+                    
+                    if not arr[0].isdigit():
+                        continue
+                    if not arr[2].replace('\n','').isdigit():
+                        continue
 
                     if arr[1] == '-':
                         if arr[2] == '0000':
@@ -125,8 +131,16 @@ def process_data(nrf):
                             if arr[0] == '004':
                                 touch_file(FILE_ALIVE4)
                             continue
+                        if arr[0] != STORE_NUMBER:
+                            print("Store number mismatch:"+ STORE_NUMBER)
+                            continue
                         message = f"{message}"
                         q.put(message)
+                        
+                    if arr[0] != STORE_NUMBER:
+                        print("Store number mismatch:"+ STORE_NUMBER)
+                        continue
+
                     if arr[1] == '+':
                         message = f"{arr[0]},-,{arr[2]}\n{message}"
                         q.put(message)
