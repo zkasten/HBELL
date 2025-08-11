@@ -18,60 +18,60 @@ import configparser
 config = configparser.ConfigParser()
 config.read('/home/pi/hbell.cfg')
 
-SERVER_IP = '10.142.36.190'
+SERVER_IP = '10.142.225.56'
 
 STORE_NUMBER = config['STORE']['ADDRESS']
 ALIVE_INTERVAL = int(config['NRF24']['ALIVE_INTERVAL'])
 
-# SPI 설정
-spi = spidev.SpiDev()
-try:
-    spi.open(0, 0)
-    spi.max_speed_hz = int(config['NRF24']['SPI_SPEED'])
-    spi.close()
-    print("SPI 장치 접근 성공: /dev/spidev0.0")
-except IOError as e:
-    print(f"SPI 장치 열기 실패: {e}")
-    raise SystemExit("SPI 설정을 확인하세요")
-
-# nRF24L01 설정
-nrf = RF24(24, 0)  # CE: GPIO 24, CSN: SPI 0
-###################################################################
-#    ADDRESS                                                      #
-pipe = config['NRF24']['PIPE'].encode('utf-8') 
-#pipe = config['NRF24']['ADDRESS']
-###################################################################
-
-print("nRF24L01 초기화 시도...")
-if not nrf.begin():
-    print("초기화 실패: nRF24L01 모듈이 응답하지 않습니다.")
-    raise RuntimeError("nRF24L01 하드웨어 초기화 실패!")
-
-###################################################################
-#    RF SETTING                                                   #
-nrf.setPALevel(RF24_PA_HIGH)
-nrf.setDataRate(RF24_250KBPS)
-#nrf.setPALevel(config['NRF24']['PA_LEVEL'])
-#nrf.setDataRate(config['NRF24']['DATA_RATE'])
-#nrf.setPALevel(RF24_PA_MAX)
-#nrf.setDataRate(RF24_1MBPS)
-###################################################################
-
-###################################################################
-#    CHANNEL                                                      #
-nrf.setChannel(int(config['NRF24']['CHANNEL']))
-###################################################################
-
-nrf.openReadingPipe(0, pipe)
-
-nrf.enableDynamicPayloads()
-nrf.setAutoAck(True)  # 자동 응답 활성화
-
-nrf.setRetries(int(config['NRF24']['RETRY_CNT']), int(config['NRF24']['RETRY_INTERVAL']))
-nrf.openWritingPipe(pipe)
-nrf.stopListening()
-
-nrf.printDetails()
+## SPI 설정
+#spi = spidev.SpiDev()
+#try:
+#    spi.open(0, 0)
+#    spi.max_speed_hz = int(config['NRF24']['SPI_SPEED'])
+#    spi.close()
+#    print("SPI 장치 접근 성공: /dev/spidev0.0")
+#except IOError as e:
+#    print(f"SPI 장치 열기 실패: {e}")
+#    raise SystemExit("SPI 설정을 확인하세요")
+#
+## nRF24L01 설정
+#nrf = RF24(24, 0)  # CE: GPIO 24, CSN: SPI 0
+####################################################################
+##    ADDRESS                                                      #
+#pipe = config['NRF24']['PIPE'].encode('utf-8') 
+##pipe = config['NRF24']['ADDRESS']
+####################################################################
+#
+#print("nRF24L01 초기화 시도...")
+#if not nrf.begin():
+#    print("초기화 실패: nRF24L01 모듈이 응답하지 않습니다.")
+#    raise RuntimeError("nRF24L01 하드웨어 초기화 실패!")
+#
+####################################################################
+##    RF SETTING                                                   #
+#nrf.setPALevel(RF24_PA_HIGH)
+#nrf.setDataRate(RF24_250KBPS)
+##nrf.setPALevel(config['NRF24']['PA_LEVEL'])
+##nrf.setDataRate(config['NRF24']['DATA_RATE'])
+##nrf.setPALevel(RF24_PA_MAX)
+##nrf.setDataRate(RF24_1MBPS)
+####################################################################
+#
+####################################################################
+##    CHANNEL                                                      #
+#nrf.setChannel(int(config['NRF24']['CHANNEL']))
+####################################################################
+#
+#nrf.openReadingPipe(0, pipe)
+#
+#nrf.enableDynamicPayloads()
+#nrf.setAutoAck(True)  # 자동 응답 활성화
+#
+#nrf.setRetries(int(config['NRF24']['RETRY_CNT']), int(config['NRF24']['RETRY_INTERVAL']))
+#nrf.openWritingPipe(pipe)
+#nrf.stopListening()
+#
+#nrf.printDetails()
 
 # Log File Setup
 def setup_log_file():
@@ -118,13 +118,11 @@ def keypad():
                     try:
                         number = int(buffer)
                         if 1 <= number <= 99999:
-                            send_message(number, is_negative=False)  # "+" 형식으로 전송
+                            #send_message(number, is_negative=False)  # "+" 형식으로 전송
 
-                            #-----------------------------------------------
-                            # Wi-Fi를 통한 메시지 전송 (주석 처리된 부분)
                             clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                             clientsocket.connect((SERVER_IP, 8089))
-                            clientsocket.send(b'001,+,123')
+                            # clientsocket.send(b'001,+,123')
                             msg = STORE_NUMBER +",+,"+ str(number)
                             print("send wifi:"+ msg)
                             clientsocket.send(msg.encode('utf-8'))
@@ -134,7 +132,6 @@ def keypad():
                             ts = now.strftime("%H:%M:%S")
                             with open(rcv_log_file, "a") as file:
                                 file.write(ts +"|"+ msg + "\n")
-                            #-----------------------------------------------
 
                         else:
                             print(f"입력 범위 오류: {number}, 1에서 99999까지 입력하세요.")
@@ -149,10 +146,8 @@ def keypad():
                     try:
                         number = int(buffer)
                         if 1 <= number <= 99999:
-                            send_message(number, is_negative=True)  # "-" 형식으로 즉시 전송
+                            #send_message(number, is_negative=True)  # "-" 형식으로 즉시 전송
 
-                            #-----------------------------------------------
-                            # Wi-Fi를 통한 메시지 전송 (주석 처리된 부분)
                             clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                             clientsocket.connect((SERVER_IP, 8089))
                             # clientsocket.send(b'001,+,123')
@@ -165,7 +160,6 @@ def keypad():
                             ts = now.strftime("%H:%M:%S")
                             with open(rcv_log_file, "a") as file:
                                 file.write(ts +"|"+ msg + "\n")
-                            #-----------------------------------------------
 
                         else:
                             print(f"입력 범위 오류: {number}, 1에서 99999까지 입력하세요.")
@@ -192,7 +186,7 @@ def keypad():
 def aliveCheck():
     try:
         while True:
-            send_message('0000', is_negative=True)
+            #send_message('0000', is_negative=True)
             time.sleep(ALIVE_INTERVAL)
 
     except KeyboardInterrupt:
@@ -217,18 +211,18 @@ def stressTest():
     finally:
         # 터미널 설정 복원 및 nRF24L01 종료
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, original_settings)
-        nrf.powerDown()
+#        nrf.powerDown()
 
 thread1 = threading.Thread(target=keypad, args=())
-thread2 = threading.Thread(target=aliveCheck, args=())
+#thread2 = threading.Thread(target=aliveCheck, args=())
 #thread3 = threading.Thread(target=stressTest, args=())
 
 thread1.start()
-thread2.start()
+#thread2.start()
 #thread3.start()
 
 thread1.join()
-thread2.join()
+#thread2.join()
 #thread3.join()
 
 
