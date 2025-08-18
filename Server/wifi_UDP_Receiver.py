@@ -3,6 +3,7 @@ import datetime
 import os
 import queue
 import psutil
+import configparser
 
 # 2025-08-11 : Initial created based on wifiReceiver.py - Hyukjo
 #              use IS_MULTI (Y/N) to determine if multi-store is enabled : hbell.cfg
@@ -24,10 +25,6 @@ server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server_socket.bind((host, port))
 
 print(f"UDP Server listening on {host}:{port}")
-
-#serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-#serversocket.bind(('0.0.0.0', 8089))
-#serversocket.listen(5) # become a server socket, maximum 5 connections
 
 def is_file_open(file_path):
     for proc in psutil.process_iter(['pid', 'open_files']):
@@ -60,10 +57,11 @@ if __name__ == '__main__':
     print("Starting to receive data...")
     try:
         while True:
-            print(f"Received message: {msg} from {addr}")
             data, addr = server_socket.recvfrom(1024)
-            msg = data.decode('utf-8')
-            arr = msg.split(',')
+            message = data.decode('utf-8')
+            print(f"Received message: {message} from {addr}")
+
+            arr = message.split(',')
             if len(arr) != 3:
                 print("Invalid message format")
                 continue
@@ -72,29 +70,29 @@ if __name__ == '__main__':
             if not arr[2].replace('\n','').isdigit():
                 continue
             
+            if IS_MULTI == 'N' and arr[0] != STORE_NUMBER:
+                    print("Store number mismatch:"+ str(arr[0]))
+                    continue
+
             if arr[1] == '-':
-                if arr[2] == '0000':
-                    # Alive Signal
-                    if arr[0] == '001':
+                if arr[0][0] != STORE_NUMBER[0]:  # Store Group & number check
+                    continue
+                if arr[2] == '0000': # Alive Signal
+                    print("Alive Signal received")
+                    if arr[0][2] == '1':
                         touch_file(FILE_ALIVE1)
-                    if arr[0] == '002':
+                    if arr[0][2] == '2':
                         touch_file(FILE_ALIVE2)
-                    if arr[0] == '003':
+                    if arr[0][2] == '3':
                         touch_file(FILE_ALIVE3)
-                    if arr[0] == '004':
+                    if arr[0][2] == '4':
                         touch_file(FILE_ALIVE4)
                     continue
-                if arr[0] != STORE_NUMBER:
-                    print("Store number mismatch:"+ STORE_NUMBER)
-                    continue
-                message = f"{message}"
-                q.put(message)
+                else: # Number Deletion
+                    message = f"{message}"
+                    q.put(message)
                 
-            if IS_MULTI == 'N' and arr[0] != STORE_NUMBER:
-                    print("Store number mismatch:"+ STORE_NUMBER)
-                    continue
-                
-            if arr[1] == '+':
+            elif arr[1] == '+':
                     message = f"{arr[0]},-,{arr[2]}\n{message}"
                     q.put(message)
                     

@@ -395,13 +395,15 @@ class MyWidget(QWidget):
         store3 = []
         store4 = []
         for i in reversed(arr):
-            if i.split(',')[0] == '001' and len(store1) < 8:
+            if i == '':
+                continue
+            if i.split(',')[0][2] == '1' and len(store1) < 8:
                 store1.append(i.split(',')[2])
-            elif i.split(',')[0] == '002' and len(store2) < 8:
+            elif i.split(',')[0][2] == '2' and len(store2) < 8:
                 store2.append(i.split(',')[2])
-            elif i.split(',')[0] == '003' and len(store3) < 8:
+            elif i.split(',')[0][2] == '3' and len(store3) < 8:
                 store3.append(i.split(',')[2])
-            elif i.split(',')[0] == '004' and len(store4) < 8:
+            elif i.split(',')[0][2] == '4' and len(store4) < 8:
                 store4.append(i.split(',')[2])
 
         while len(store1) < 8:
@@ -469,6 +471,7 @@ class MyWidget(QWidget):
             self.numLabel4_7.setText("*")
             self.numLabel4_7.setStyleSheet("color: red")
 
+##
         self.showFullScreen()
         self.setGeometry(0, 0, 1920, 1080)
         self.label.resize(self.pixmap.width(), self.pixmap.height())
@@ -480,6 +483,7 @@ if __name__ == '__main__':
     widget.setCursor(QCursor(Qt.CursorShape.BlankCursor))
     # widget.setStyleSheet("background-color: red;")
 
+##
     widget.showFullScreen()
 
 #    widget.show()

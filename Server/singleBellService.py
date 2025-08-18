@@ -79,6 +79,7 @@ class DataUpdater(QTextEdit):
         return
 
     def clean_log_file(self):
+        ring = False
         log_file = LOG_FILE_DIR + str(datetime.date.today()) + ".log"
         try:
             with open(log_file, "r") as num_file:
@@ -106,6 +107,8 @@ class DataUpdater(QTextEdit):
                     print("remove3")
                     lines.remove(i)
                     continue
+                if lineArr[2].replace('\n','') == '99999':
+                    ring = True
                 if lineArr[1] == '-':
                     print("remove-")
                     delItems[lineArr[2]] = lineArr[0]
@@ -115,6 +118,7 @@ class DataUpdater(QTextEdit):
                         print("remove-else")
                         lines.remove(i)
             num_file.writelines(lines)
+        return ring
                                 
     def read_last_lines(self, num_lines=NUM_LINES_TO_READ):
         log_file = LOG_FILE_DIR + str(datetime.date.today()) + ".log"
@@ -133,7 +137,10 @@ class DataUpdater(QTextEdit):
 
     def update_data(self):
         self.create_empty_file_if_not_exists()
-        self.clean_log_file()
+        ring = self.clean_log_file()
+        print("ring:"+ str(ring))
+        if ring:
+            self.play_sound()
 
         if os.path.exists(FILE_ALIVE):
             global ISALIVE
@@ -310,7 +317,8 @@ class MyWidget(QWidget):
         else:
             self.pixmap = QPixmap("backgroundS_err.png")
         self.label.setPixmap(self.pixmap)
-        self.showFullScreen()
+#--------------------------
+#        self.showFullScreen()
 
 #        self.setGeometry(0, 0, 1920, 1080)
 #        self.label.resize(self.pixmap.width(), self.pixmap.height())

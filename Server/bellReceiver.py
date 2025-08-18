@@ -16,15 +16,15 @@ import configparser
 # 2025-05-30 : move setup_log_file() to while loop - Hyukjoo
 # 2025-05-27 : add is_file_open - Hyukjoo
 
-config = configparser.ConfigParser()
-config.read('/home/pi/hbell.cfg')
-
-STORE_NUMBER = config['STORE']['ADDRESS']
-
 FILE_ALIVE1 = "/home/pi/log/alive1.txt"
 FILE_ALIVE2 = "/home/pi/log/alive2.txt"
 FILE_ALIVE3 = "/home/pi/log/alive3.txt"
 FILE_ALIVE4 = "/home/pi/log/alive4.txt"
+
+config = configparser.ConfigParser()
+config.read('/home/pi/hbell.cfg')
+STORE_NUMBER = config['STORE']['ADDRESS']
+IS_MULTI = config['STORE'].get('IS_MULTI', 'N').upper()
 
 # SPI Setup
 def setup_spi():
@@ -118,29 +118,29 @@ def process_data(nrf):
                         continue
                     if not arr[2].replace('\n','').isdigit():
                         continue
-
-                    if arr[1] == '-':
-                        if arr[2] == '0000':
-                            # Alive Signal
-                            if arr[0] == '001':
-                                touch_file(FILE_ALIVE1)
-                            if arr[0] == '002':
-                                touch_file(FILE_ALIVE2)
-                            if arr[0] == '003':
-                                touch_file(FILE_ALIVE3)
-                            if arr[0] == '004':
-                                touch_file(FILE_ALIVE4)
-                            continue
-                        if arr[0] != STORE_NUMBER:
-                            print("Store number mismatch:"+ STORE_NUMBER)
-                            continue
-                        message = f"{message}"
-                        q.put(message)
-                        
-                    if arr[0] != STORE_NUMBER:
-                        print("Store number mismatch:"+ STORE_NUMBER)
+                    
+                    if IS_MULTI == 'N' and arr[0] != STORE_NUMBER:
+                        print("Store number mismatch:"+ str(arr[0]))
                         continue
 
+                    if arr[1] == '-':
+                        if arr[0][0] != STORE_NUMBER[0]:  # Store Group & number check
+                            continue
+                        if arr[2] == '0000': # Alive Signal
+                            print("Alive Signal received")
+                            if arr[0][2] == '1':
+                                touch_file(FILE_ALIVE1)
+                            if arr[0][2] == '2':
+                                touch_file(FILE_ALIVE2)
+                            if arr[0][2] == '3':
+                                touch_file(FILE_ALIVE3)
+                            if arr[0][2] == '4':
+                                touch_file(FILE_ALIVE4)
+                            continue
+                        else: # Number Deletion
+                            message = f"{message}"
+                            q.put(message)
+                        
                     if arr[1] == '+':
                         message = f"{arr[0]},-,{arr[2]}\n{message}"
                         q.put(message)
