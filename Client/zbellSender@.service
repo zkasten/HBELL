@@ -5,7 +5,7 @@ Conflicts=getty@%I.service
 Before=getty.target
 
 [Service]
-ExecStart=python3 /home/pi/p.py
+ExecStart=python3 /home/pi/pp.py
 StandardInput=tty
 StandardOutput=tty
 Restart=always
