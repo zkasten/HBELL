@@ -1,13 +1,14 @@
 import sys
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QLabel
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPixmap
 import socket
 
 class KeyPadWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('1920x480 Number Pad Custom')
-        self.setFixedSize(1920, 480)
+        self.setFixedSize(1920, 720)
         self.entered_numbers = []
         self.input_buffer = []
 
@@ -19,13 +20,29 @@ class KeyPadWidget(QWidget):
         self.grid = QGridLayout()
         self.grid.setSpacing(14)
         self.num_labels = []
-        for row in range(2):
-            for col in range(4):
-                label = QLabel('')
-                label.setStyleSheet("font-size:44px; border:2px solid #999; min-width:120px; min-height:60px; background:#fafaff;")
-                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.num_labels.append(label)
-                self.grid.addWidget(label, row, col)
+        for row in range(3):
+            for col in range(3):
+                if row == 2 and col == 2:
+                    label = QLabel('H Mart')
+                    pixmap = QPixmap("h_logo.png")
+                    label.setPixmap(pixmap)
+
+                    label.setStyleSheet("font-size:80px; min-width:120px; min-height:60px; color:red;")
+                    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.num_labels.append(label)
+                    self.grid.addWidget(label, row, col)
+                elif row == 0 and col == 0:
+                    label = QLabel('')
+                    label.setStyleSheet("font-size:88px; border:2px solid #999; min-width:120px; min-height:60px; background:#fafaff; color:red;")
+                    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.num_labels.append(label)
+                    self.grid.addWidget(label, row, col)
+                else:
+                    label = QLabel('')
+                    label.setStyleSheet("font-size:88px; border:2px solid #999; min-width:120px; min-height:60px; background:#fafaff;")
+                    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.num_labels.append(label)
+                    self.grid.addWidget(label, row, col)
         left_panel.addLayout(self.grid)
         main_layout.addLayout(left_panel, 2)
 
@@ -38,8 +55,8 @@ class KeyPadWidget(QWidget):
 
         num_grid = QGridLayout()
         num_grid.setSpacing(8)
-        btn_size = (100, 100)
-        sendBtn_size = (100, 135)
+        btn_size = (150, 150)
+        sendBtn_size = (150, 200)
         
         button_positions = [
             ('7', 0, 0), ('8', 0, 1), ('9', 0, 2),
@@ -62,7 +79,8 @@ class KeyPadWidget(QWidget):
         btn_ring = QPushButton('Ring')
         btn_ring.setFixedSize(*btn_size)
         btn_ring.setStyleSheet("font-size:28px; background:#b0c4de;")
-        btn_ring.clicked.connect(lambda: self.press_key('c'))
+        #btn_ring.clicked.connect(lambda: self.press_key('c'))
+        btn_ring.clicked.connect(lambda: self.ring())
         special_buttons_layout.addWidget(btn_ring)
         
         btn_bksp = QPushButton('<')
@@ -145,6 +163,24 @@ class KeyPadWidget(QWidget):
         self.refresh_input_display()
         self.refresh_num_labels()
 
+    def send_msg(self, snd_number):
+        result = 'fail'
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect(('localhost', 6000))
+                s.sendall(str(snd_number).encode())
+                result = s.recv(1024).decode()
+        except Exception as e:
+            print('Exception return fail')
+        return result
+        
+    def move_or_insert(self, num):
+        if num in self.entered_numbers:
+            self.entered_numbers.remove(num)
+            self.entered_numbers.insert(0, num)
+        else:
+            self.entered_numbers.insert(0, num)
+        
     def press_key(self, value):
         if len(self.input_buffer) < 4:
             self.input_buffer.append(value)
@@ -156,25 +192,45 @@ class KeyPadWidget(QWidget):
     def enter_number(self):
         if self.input_buffer:
             number = ''.join(self.input_buffer)
-
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.connect(('localhost', 6000))
-                s.sendall(str(number).encode())
-            self.entered_numbers.insert(0, number)
-            if len(self.entered_numbers) > 8:
-                self.entered_numbers = self.entered_numbers[:8]
+            snd_number = number + ',+'
+            result = self.send_msg(snd_number)
+#            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#                s.connect(('localhost', 6000))
+#                s.sendall(str(snd_number).encode())
+#                result = s.recv(1024)
+            print("-----------------result---------------")
+            if result == 'ok':
+                self.move_or_insert(number)
+    #            self.entered_numbers.insert(0, number)
+                if len(self.entered_numbers) > 8:
+                    self.entered_numbers = self.entered_numbers[:8]
             self.input_buffer.clear()
             self.refresh_input_display()
             self.refresh_num_labels()
     def delete_with_a(self):
         if self.input_buffer:
-            number = ''.join(self.input_buffer) + 'a'
-            self.entered_numbers.insert(0, number)
-            if len(self.entered_numbers) > 8:
-                self.entered_numbers = self.entered_numbers[:8]
+            number = ''.join(self.input_buffer)
+            snd_number = number + ',-'
+            result = self.send_msg(snd_number)
+#            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#                s.connect(('localhost', 6000))
+#                s.sendall(str(snd_number).encode())
+#                result = s.recv(1024)
+            if result == 'ok':
+                if number in self.entered_numbers:
+                    self.entered_numbers.remove(number)
+    #            self.entered_numbers.insert(0, number)
+                if len(self.entered_numbers) > 8:
+                    self.entered_numbers = self.entered_numbers[:8]
             self.input_buffer.clear()
             self.refresh_input_display()
             self.refresh_num_labels()
+    def ring(self):
+        result = self.send_msg('99999,-')
+#        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#            s.connect(('localhost', 6000))
+#            s.sendall(str('99999,-').encode())
+            
     def refresh_num_labels(self):
         for i in range(8):
             self.num_labels[i].setText(self.entered_numbers[i] if i < len(self.entered_numbers) else '')
@@ -184,6 +240,7 @@ class KeyPadWidget(QWidget):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     win = KeyPadWidget()
+    win.setCursor(Qt.CursorShape.BlankCursor)
     #win.show()
     win.showFullScreen()
     sys.exit(app.exec())
