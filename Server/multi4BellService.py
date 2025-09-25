@@ -9,6 +9,7 @@ import pygame
 import time
 import psutil
 
+# 2025-09-25 : FIX number duplication - hyukjoo
 # 2025-05-27 : add is_file_open - Hyukjoo
 
 FILE_ALIVE1 = "/home/pi/log/alive1.txt"
@@ -69,6 +70,7 @@ class DataUpdater(QTextEdit):
         return
 
     def clean_log_file(self):
+        ring = False
         log_file = LOG_FILE_DIR + str(datetime.date.today()) + ".log"
         try:
             with open(log_file, "r") as num_file:
@@ -84,15 +86,27 @@ class DataUpdater(QTextEdit):
             for i in reversed(lines):
                 lineArr = i.split(",")
                 if len(lineArr) < 3:
+                    print("remove1")
                     lines.remove(i)
-
+                    continue
+                if not lineArr[0].isdigit():
+                    print("remove2")
+                    lines.remove(i)
+                    continue
+                if not lineArr[2].replace('\n','').isdigit():
+                    print("remove3")
+                    lines.remove(i)
+                    continue                    
+                if lineArr[2].replace('\n','') == '99999':
+                    ring = True
                 if lineArr[1] == '-':
-                    delItems[lineArr[2]] = lineArr[0]
+                    delItems[lineArr[2].strip('\n')] = lineArr[0]
                     lines.remove(i)
                 else:
-                    if lineArr[2] in delItems and lineArr[0] == delItems[lineArr[2]]:
+                    if lineArr[2].strip('\n') in delItems and lineArr[0] == delItems[lineArr[2]].strip('\n'):
                         lines.remove(i)
             num_file.writelines(lines)
+        return ring
 
     def read_last_lines(self, num_lines=NUM_LINES_TO_READ):
         log_file = LOG_FILE_DIR + str(datetime.date.today()) + ".log"
@@ -111,7 +125,9 @@ class DataUpdater(QTextEdit):
 
     def update_data(self):
         self.create_empty_file_if_not_exists()
-        self.clean_log_file()
+        ring = self.clean_log_file()
+        if ring:
+            self.play_sound()
 
         if os.path.exists(FILE_ALIVE1) and os.path.exists(FILE_ALIVE2) and os.path.exists(FILE_ALIVE3) and os.path.exists(FILE_ALIVE4):
             ############# ALIVE CHECK #############

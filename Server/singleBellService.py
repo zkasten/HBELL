@@ -10,6 +10,7 @@ import time
 import configparser
 import psutil
 
+# 2025-09-25 : FIX number duplication - hyukjoo
 # 2025-06-25 : Add number validation check, Add is_file_open() - Hyukjoo
 # 2025-06-06 : Add configparser - Hyukjoo
 
@@ -111,10 +112,19 @@ class DataUpdater(QTextEdit):
                     ring = True
                 if lineArr[1] == '-':
                     print("remove-")
-                    delItems[lineArr[2]] = lineArr[0]
+                    print(lineArr[2]) 
+                    print(lineArr[0])
+
+                    delItems[lineArr[2].strip('\n')] = lineArr[0]
+                    print(delItems)
                     lines.remove(i)
                 else:
-                    if lineArr[2] in delItems and lineArr[0] == delItems[lineArr[2]]:
+                    print('----arr info---')
+                    print(lineArr[2])
+                    print(delItems)
+                    if lineArr[2].strip('\n') in delItems:
+                        print(delItems[lineArr[2]])
+                    if lineArr[2].strip('\n') in delItems and lineArr[0] == delItems[lineArr[2].strip('\n')]:
                         print("remove-else")
                         lines.remove(i)
             num_file.writelines(lines)
