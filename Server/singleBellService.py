@@ -12,6 +12,7 @@ import psutil
 
 config = configparser.ConfigParser()
 config.read('/home/pi/hbell.cfg')
+
             
 STORE_NUMBER = config['STORE']['ADDRESS']
 
