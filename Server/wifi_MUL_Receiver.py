@@ -4,6 +4,7 @@ import os
 import queue
 import psutil
 import configparser
+import struct
 
 # 2025-08-11 : Initial created based on wifiReceiver.py - Hyukjo
 #              use IS_MULTI (Y/N) to determine if multi-store is enabled : hbell.cfg
@@ -18,13 +19,21 @@ config.read('/home/pi/hbell.cfg')
 STORE_NUMBER = config['STORE']['ADDRESS']
 IS_MULTI = config['STORE'].get('IS_MULTI', 'N').upper()
 
-host = '0.0.0.0'
-port = 8089
+#host = '0.0.0.0'
+#port = 8089
+#server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+#server_socket.bind((host, port))
 
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-server_socket.bind((host, port))
+MCAST_GRP = '224.0.0.1'
+MCAST_PORT = 5007
+BUFF_SIZE = 1024
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+server_socket.bind(('', MCAST_PORT))
+mreq = struct.pack('4sl', socket.inet_aton(MCAST_GRP), socket.INADDR_ANY)
+server_socket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
-print(f"UDP Server listening on {host}:{port}")
+#print(f"UDP Server listening on {host}:{port}")
 
 def is_file_open(file_path):
     for proc in psutil.process_iter(['pid', 'open_files']):
@@ -57,7 +66,9 @@ if __name__ == '__main__':
     print("Starting to receive data...")
     try:
         while True:
-            data, addr = server_socket.recvfrom(1024)
+#            data, addr = server_socket.recvfrom(1024)
+            data, addr = server_socket.recvfrom(BUFF_SIZE)
+
             message = data.decode('utf-8')
             print(f"Received message: {message} from {addr}")
 

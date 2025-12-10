@@ -26,7 +26,11 @@ NUM_LINES_TO_READ = 8
 UPDATE_INTERVAL_MS = 1000
 FONT_SIZE_LARGE = 100
 FONT_SIZE_SMALL = 70
-ALIVE_INTERVAL = 5 # seconds
+ALIVE_INTERVAL = 11 # seconds
+FLAG1 = "DOWN"
+FLAG2 = "DOWN"
+FLAG3 = "DOWN"
+FLAG4 = "DOWN"
 
 class DataUpdater(QTextEdit):
     data_updated = pyqtSignal(str)
@@ -56,7 +60,28 @@ class DataUpdater(QTextEdit):
     def play_sound(self):
 #        sound = QSoundEffect(QApplication.instance())
 #        sound.setSource(QUrl.fromLocalFile(RING_FILE))
-        self.sound.play()
+        #self.sound.play()
+        return
+
+    def put_err_log(self, store_nm, flag):
+        self.create_empty_err_log_file_if_not_exists()
+        err_file = LOG_FILE_DIR + "err-"+ str(datetime.date.today()) + ".log"
+        
+        with open(err_file, "a") as file:
+            now = datetime.datetime.now()
+            file.write(str(now) + " "+ store_nm +" "+ flag +"\r\n")
+        return
+    
+    def create_empty_err_log_file_if_not_exists(self):
+        err_file = LOG_FILE_DIR + "err-"+ str(datetime.date.today()) + ".log"
+
+        if not os.path.exists(err_file):
+            try:
+                with open(err_file, 'w'):
+                    pass  # touch log file
+            except Exception as e:
+                print(f"Error: File '{err_file}' not created.")
+        return
 
     def create_empty_file_if_not_exists(self):
         log_file = LOG_FILE_DIR + str(datetime.date.today()) + ".log"
@@ -84,7 +109,9 @@ class DataUpdater(QTextEdit):
         with open(log_file, "w") as num_file:
             delItems = {}
             for i in reversed(lines):
-                lineArr = i.split(",")
+                lineArr = i.replace("\r", "").replace("\n", "").split(",")
+                print(lineArr)
+                
                 if len(lineArr) < 3:
                     print("remove1")
                     lines.remove(i)
@@ -93,17 +120,21 @@ class DataUpdater(QTextEdit):
                     print("remove2")
                     lines.remove(i)
                     continue
-                if not lineArr[2].replace('\n','').isdigit():
+                if not lineArr[2].isdigit():
                     print("remove3")
                     lines.remove(i)
                     continue                    
-                if lineArr[2].replace('\n','') == '99999':
+                if lineArr[2] == '99999':
                     ring = True
                 if lineArr[1] == '-':
-                    delItems[lineArr[2].strip('\n')] = lineArr[0]
+                    print("Add delItem")
+                    print(lineArr[2])
+                    delItems[lineArr[2]] = lineArr[0]
                     lines.remove(i)
                 else:
-                    if lineArr[2].strip('\n') in delItems and lineArr[0] == delItems[lineArr[2]].strip('\n'):
+                    print("check delItem")
+                    print(lineArr[2])
+                    if lineArr[2] in delItems and lineArr[0] == delItems[lineArr[2]]:
                         lines.remove(i)
             num_file.writelines(lines)
         return ring
@@ -131,7 +162,7 @@ class DataUpdater(QTextEdit):
 
         if os.path.exists(FILE_ALIVE1) and os.path.exists(FILE_ALIVE2) and os.path.exists(FILE_ALIVE3) and os.path.exists(FILE_ALIVE4):
             ############# ALIVE CHECK #############
-            global ISALIVE1, ISALIVE2, ISALIVE3, ISALIVE4
+            global ISALIVE1, ISALIVE2, ISALIVE3, ISALIVE4, FLAG1, FLAG2, FLAG3, FLAG4
             cur_time = int(time.time())
             file_time1 = os.path.getmtime(FILE_ALIVE1)
             file_time2 = os.path.getmtime(FILE_ALIVE2)
@@ -140,20 +171,44 @@ class DataUpdater(QTextEdit):
 
             if cur_time - file_time1 > ALIVE_INTERVAL:
                 ISALIVE1 = False
+                if FLAG1 == "UP":
+                    FLAG1 = "DOWN"
+                    self.put_err_log("1", FLAG1)
             else:
                 ISALIVE1 = True
+                if FLAG1 == "DOWN":
+                    FLAG1 = "UP"
+                    self.put_err_log("1", FLAG1)
             if cur_time - file_time2 > ALIVE_INTERVAL:
                 ISALIVE2 = False
+                if FLAG2 == "UP":
+                    FLAG2 = "DOWN"
+                    self.put_err_log("2", FLAG2)
             else:
                 ISALIVE2 = True
+                if FLAG2 == "DOWN":
+                    FLAG2 = "UP"
+                    self.put_err_log("2", FLAG2)
             if cur_time - file_time3 > ALIVE_INTERVAL:
                 ISALIVE3 = False
+                if FLAG3 == "UP":
+                    FLAG3 = "DOWN"
+                    self.put_err_log("3", FLAG3)
             else:
                 ISALIVE3 = True
+                if FLAG3 == "DOWN":
+                    FLAG3 = "UP"
+                    self.put_err_log("3", FLAG3)
             if cur_time - file_time4 > ALIVE_INTERVAL:
                 ISALIVE4 = False
+                if FLAG4 == "UP":
+                    FLAG4 = "DOWN"
+                    self.put_err_log("4", FLAG4)
             else:
                 ISALIVE4 = True
+                if FLAG4 == "DOWN":
+                    FLAG4 = "UP"
+                    self.put_err_log("4", FLAG4)
 
         file = QFile(self.filename)
         if file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
@@ -192,6 +247,10 @@ class DataUpdater(QTextEdit):
 class MyWidget(QWidget):
     def __init__(self, filename):
         super().__init__()
+        self.flag1 = "DOWN"
+        self.flag2 = "DOWN"
+        self.flag3 = "DOWN"
+        self.flag4 = "DOWN"
 
         self.label = QLabel(self)
         self.pixmap = QPixmap("background.png")
@@ -235,7 +294,7 @@ class MyWidget(QWidget):
         pixmap1 = QPixmap("store1.png")
         pixmap2 = QPixmap("store2.png")
         pixmap3 = QPixmap("store3.png")
-        pixmap4 = QPixmap("store4.png")
+#        pixmap4 = QPixmap("store4.png")
         self.store_name1 = QLabel()
         self.store_name1.setPixmap(pixmap1)
         self.store_name2 = QLabel()
@@ -243,7 +302,7 @@ class MyWidget(QWidget):
         self.store_name3 = QLabel()
         self.store_name3.setPixmap(pixmap3)
         self.store_name4 = QLabel()
-        self.store_name4.setPixmap(pixmap4)
+#        self.store_name4.setPixmap(pixmap4)
 
         self.layout_store_names.addWidget(self.store_name1)
         self.layout_store_names.addWidget(self.store_name2)
@@ -275,13 +334,13 @@ class MyWidget(QWidget):
         self.numLabel3_6 = QLabel("26")
         self.numLabel3_7 = QLabel("*")
 
-        self.numLabel4_1 = QLabel("1")
-        self.numLabel4_2 = QLabel("2")
-        self.numLabel4_3 = QLabel("3")
-        self.numLabel4_4 = QLabel("4")
-        self.numLabel4_5 = QLabel("5")
-        self.numLabel4_6 = QLabel("6")
-        self.numLabel4_7 = QLabel("*")
+        self.numLabel4_1 = QLabel("")
+        self.numLabel4_2 = QLabel("")
+        self.numLabel4_3 = QLabel("")
+        self.numLabel4_4 = QLabel("")
+        self.numLabel4_5 = QLabel("")
+        self.numLabel4_6 = QLabel("")
+        self.numLabel4_7 = QLabel("")
 
         self.numLabel1_1.setFont(QFont('Arial', FONT_SIZE_LARGE))
         self.numLabel1_2.setFont(QFont('Arial', FONT_SIZE_LARGE))
@@ -484,7 +543,7 @@ class MyWidget(QWidget):
             self.numLabel4_7.setText(store4[6])
             self.numLabel4_7.setStyleSheet("color: black")
         else:
-            self.numLabel4_7.setText("*")
+#            self.numLabel4_7.setText("*")
             self.numLabel4_7.setStyleSheet("color: red")
 
 ##

@@ -14,7 +14,7 @@ sleep 10
 
 echo "PID : $$"
 
-if ps ax |grep pp.sh| grep -v $$ | grep -v grep > /dev/null
+if ps ax |grep bellSender.sh| grep -v $$ | grep -v grep > /dev/null
     then
     exit
 fi
