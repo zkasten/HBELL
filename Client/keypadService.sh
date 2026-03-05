@@ -9,11 +9,11 @@ export XAUTHORITY=$HOME/.Xauthority
 #setterm -cursor off
 
 # you can normally leave this alone
-SERVICE="/home/pi/HBELL-Receiver/bellReceiver.py"
+SERVICE="/home/pi/HBELL-Sender/keypadService.py"
 
 echo "PID : $$"
 
-if ps ax |grep bellReceiver.sh| grep -v $$ | grep -v grep > /dev/null
+if ps ax |grep keypadService.sh| grep -v $$ | grep -v grep > /dev/null
     then
     exit
 fi
@@ -31,7 +31,7 @@ else
                 echo "$currenttime"
                 exit
             fi
-            python $SERVICE > /dev/null 2> /dev/null
+            python3 $SERVICE > /dev/null 2> /dev/null
 
         done
 

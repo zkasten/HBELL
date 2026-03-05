@@ -9,7 +9,7 @@
 #setterm -cursor off
 
 # you can normally leave this alone
-SERVICE="/home/pi/bellSender.py"
+SERVICE="/home/pi/HBELL-Sender/bellSender.py"
 sleep 10
 
 echo "PID : $$"
@@ -22,7 +22,7 @@ fi
 while true; do
         if ps ax | grep -v grep | grep $SERVICE > /dev/null
         then
-        sleep 1;
+        sleep 3;
 else
         while true;
         do
@@ -32,8 +32,7 @@ else
                 echo "$currenttime"
                 exit
             fi
-            python3 $SERVICE > /dev/null 2> /dev/null
-            #python3 $SERVICE >> /tmp/pp.out 2>> /tmp/pp.err
+            python $SERVICE > /dev/null 2> /dev/null
 
         done
 

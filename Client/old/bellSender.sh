@@ -1,19 +1,20 @@
 #!/bin/sh
 
 # Set the DISPLAY environment variable
-export DISPLAY=:0
+#export DISPLAY=:0
 # Set the XAUTHORITY environment variable
-export XAUTHORITY=$HOME/.Xauthority
+#export XAUTHORITY=$HOME/.Xauthority
 
 # get rid of the cursor so we don't see it when videos are running
 #setterm -cursor off
 
 # you can normally leave this alone
-SERVICE="/home/pi/HBELL-Receiver/bellReceiver.py"
+SERVICE="/home/pi/bellSender.py"
+sleep 10
 
 echo "PID : $$"
 
-if ps ax |grep bellReceiver.sh| grep -v $$ | grep -v grep > /dev/null
+if ps ax |grep bellSender.sh| grep -v $$ | grep -v grep > /dev/null
     then
     exit
 fi
@@ -31,7 +32,8 @@ else
                 echo "$currenttime"
                 exit
             fi
-            python $SERVICE > /dev/null 2> /dev/null
+            python3 $SERVICE > /dev/null 2> /dev/null
+            #python3 $SERVICE >> /tmp/pp.out 2>> /tmp/pp.err
 
         done
 

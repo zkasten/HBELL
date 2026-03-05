@@ -9,7 +9,7 @@ export XAUTHORITY=$HOME/.Xauthority
 #setterm -cursor off
 
 # you can normally leave this alone
-SERVICE="bellService.py"
+SERVICE="/home/pi/HBELL-Receiver/bellService.py"
 
 echo "PID : $$"
 
@@ -31,8 +31,7 @@ else
                 echo "$currenttime"
                 exit
             fi
-            #cvlc --play-and-exit -f /home/tvadmin/TV/ --alsa-audio-device hdmi:CARD=vc4hdmi,DEV=0 --no-video-title-show > /dev/null 2> /dev/null
-            python3 $SERVICE > /dev/null 2> /dev/null
+            python $SERVICE > /dev/null 2> /dev/null
 
         done
 

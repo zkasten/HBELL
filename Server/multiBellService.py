@@ -1,29 +1,59 @@
 import sys
 import os
 import datetime
-from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QTextEdit)
+import configparser
+from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QTextEdit, QFrame)
 from PyQt6.QtCore import QTimer, pyqtSignal, QObject, Qt, QFile, QIODevice, QUrl, QTextStream, QByteArray
 from PyQt6.QtGui import QFont, QCursor, QPixmap
-#from PyQt6.QtMultimedia import QSoundEffect
 import pygame
-from layout_colorwidget import Color
 import time
+import fcntl
 
+# HBELL Wifi Multicast Receiver
+# V1.3.0
+#
+# 2026-02-17 Extended to support 10 stores - Hyukjoo
+
+CONFIG_PATH = '/home/pi/HBELL-Receiver/hbell.cfg'
 LOG_FILE_DIR = "/home/pi/log/"
-RING_FILE = "ring.wav"
-NUM_LINES_TO_READ = 8
+RING_FILE = "/home/pi/ring.wav"
+NUM_LINES_TO_READ = 10
 UPDATE_INTERVAL_MS = 1000
-FONT_SIZE_LARGE = 100
-FONT_SIZE_SMALL = 70
+MAX_STORES = 5
+NUMS_PER_STORE = 7
+ALIVE_INTERVAL = 25  # seconds
 
+# Font sizes per MAX_STORES
+FONT_TABLE = {
+    2: (140, 100),
+    3: (120, 85),
+    4: (100, 70),
+    5: (80, 55),
+    6: (65, 45),
+    7: (55, 38),
+    8: (45, 32),
+    9: (40, 28),
+    10: (36, 25),
+}
+
+def load_config():
+    """Load configuration from hbell.cfg"""
+    config = configparser.ConfigParser()
+    config.read(CONFIG_PATH)
+    enable_sound = config.getboolean('DISPLAY', 'ENABLE_SOUND', fallback=True)
+    max_stores = config.getint('DISPLAY', 'MAX_STORES', fallback=4)
+    store_cnt = config.getint('DISPLAY', 'STORE_CNT', fallback=max_stores)
+    return enable_sound, max_stores, store_cnt
+
+ENABLE_SOUND, MAX_STORES, STORE_CNT = load_config()
+FONT_SIZE_LARGE, FONT_SIZE_SMALL = FONT_TABLE.get(MAX_STORES, (80, 55))
+
+# --- DataUpdater Class ---
 class DataUpdater(QTextEdit):
-    data_updated = pyqtSignal(str)
+    data_updated = pyqtSignal(dict)
 
-    def __init__(self, filename):
+    def __init__(self):
         super().__init__()
-        self.filename = filename
-        self.curTxt = ""
-        self.counter = 0
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_data)
         self.timer.start(UPDATE_INTERVAL_MS)
@@ -31,447 +61,327 @@ class DataUpdater(QTextEdit):
         pygame.mixer.init()
         self.sound = pygame.mixer.Sound(RING_FILE)
 
+        self.monitors = [
+            {"file": f"/home/pi/log/alive{i}.txt", "is_alive": False, "flag": "DOWN", "name": str(i)}
+            for i in range(MAX_STORES)
+        ]
+
+    def file_open(self, file_path, mode='r', max_retries=10):
+        for _ in range(max_retries):
+            try:
+                lock_type = fcntl.LOCK_SH if mode == 'r' else fcntl.LOCK_EX
+                f = open(file_path, mode)
+                fcntl.flock(f, lock_type | fcntl.LOCK_NB)
+                return f
+            except BlockingIOError:
+                f.close()
+                time.sleep(0.1)
+        raise TimeoutError(f"File Lock failed: {file_path}")
+        
     def play_sound(self):
-#        sound = QSoundEffect(QApplication.instance())
-#        sound.setSource(QUrl.fromLocalFile(RING_FILE))
-        self.sound.play()
+        if ENABLE_SOUND:
+            self.sound.play()
+
+    def put_err_log(self, store_nm, flag):
+        self.create_empty_err_log_file_if_not_exists()
+        err_file = os.path.join(LOG_FILE_DIR, f"err-{datetime.date.today()}.log")
+        with open(err_file, "a") as file:
+            now = datetime.datetime.now()
+            file.write(f"{now} {store_nm} {flag}\r\n")
+
+    def create_empty_err_log_file_if_not_exists(self):
+        err_file = os.path.join(LOG_FILE_DIR, f"err-{datetime.date.today()}.log")
+        if not os.path.exists(err_file):
+            try:
+                open(err_file, 'w').close()
+            except Exception as e:
+                print(f"Error: File '{err_file}' not created: {e}")
 
     def create_empty_file_if_not_exists(self):
-        log_file = LOG_FILE_DIR + str(datetime.date.today()) + ".log"
-
+        log_file = os.path.join(LOG_FILE_DIR, f"{datetime.date.today()}.log")
         if not os.path.exists(log_file):
             try:
-                with open(log_file, 'w'):
-                    pass  # touch log file
+                open(log_file, 'w').close()
             except Exception as e:
-                print(f"Error: File '{log_file}' not created.")
-        return
+                print(f"Error: File '{log_file}' not created: {e}")
 
     def clean_log_file(self):
-        log_file = LOG_FILE_DIR + str(datetime.date.today()) + ".log"
-        try:
-            with open(log_file, "r") as num_file:
-                lines = num_file.readlines()
-        except FileNotFoundError:
-            return f"Error: File '{log_file}' not found."
-
-        delItems = {}
-        for i in reversed(lines):
-            lineArr = i.split(",")
-            if lineArr[1] == '-':
-                delItems[lineArr[2]] = lineArr[0]
-                lines.remove(i)
-            else:
-                if lineArr[2] in delItems and lineArr[0] == delItems[lineArr[2]]:
-                    lines.remove(i)
+        ring = False
+        log_file = os.path.join(LOG_FILE_DIR, f"{datetime.date.today()}.log")
+        f = None
         
-        with open(log_file, "w") as num_file:
-            num_file.writelines(lines)
+        try:
+            f = self.file_open(log_file, 'r')
+            lines = f.readlines()
+        except FileNotFoundError:
+            return False
+        finally:
+            if f:
+                fcntl.flock(f, fcntl.LOCK_UN)
+                f.close()
+                
+        result = []
+        for line in lines:
+            parts = line.strip().split(',')
+            if len(parts) < 2:
+                continue
 
+            if parts[1] == '-':
+                for i in range(len(result) -1, -1, -1):
+                    r_parts = result[i].strip().split(',')
+                    if r_parts[0] == parts[0] and r_parts[2] == parts[2] and r_parts[1] == '+':
+                        result.pop(i)
+                        break
+            else:
+                result.append(line)
+
+        try:
+            f = self.file_open(log_file, 'w')
+            f.writelines(result)
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+            f.close()
+
+        return ring
+        
     def read_last_lines(self, num_lines=NUM_LINES_TO_READ):
-        log_file = LOG_FILE_DIR + str(datetime.date.today()) + ".log"
-        file = QFile(log_file)
-        lines = []
-        stream = QTextStream(file)
-        #if file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
-        if not file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
-            return None
-        while not stream.atEnd():
-            lines.append(stream.readLine())
-        file.close()
-
-        #return lines[-8:]
-        return lines
+        log_file = os.path.join(LOG_FILE_DIR, f"{datetime.date.today()}.log")
+        try:
+            with open(log_file, 'r') as f:
+                lines = f.readlines()
+            return lines
+        except FileNotFoundError:
+            return []
 
     def update_data(self):
         self.create_empty_file_if_not_exists()
-        self.clean_log_file()
-
-        file = QFile(self.filename)
-        if file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
-            text = file.readAll()
-        else:
-            self.setPlainText("Failed to open file.")
-        file.close()
-
-        log = self.read_last_lines()
-        log_b_arr = QByteArray()
-        for i in log:
-            i += "\n"
-            encoded_string = i.encode('utf-8')
-            log_b_arr.append(QByteArray(encoded_string))
-
-        # print("LOG:"+ str(log_b_arr))
-        # print("TXT:"+ str(text))
-        # print("MEM:"+ str(self.curTxt))
-
-        if text != log_b_arr:
-            # print("-------------------DIFF btw LOG & CUR------")
+        if self.clean_log_file():
             self.play_sound()
 
-            text = log_b_arr
-            self.curTxt = log_b_arr
-            # print("text type:"+ str(type(text)))
-            # print("log_b_arr type:"+ str(type(log_b_arr)))
-            # print(str(log_b_arr))
+        cur_time = int(time.time())
+        for monitor in self.monitors:
+            if os.path.exists(monitor["file"]):
+                file_time = os.path.getmtime(monitor["file"])
+                is_currently_alive = (cur_time - file_time) <= ALIVE_INTERVAL
 
-            file = QFile(self.filename)
-            if not file.open(QIODevice.OpenModeFlag.WriteOnly):
-                return
-
-            dataStream = QTextStream(file)
-            dataStream << log_b_arr
-            file.close()
-        # else:
-            # print("-------------------SAME btw cur & log------")
-
-        self.setPlainText(str(text, 'utf-8'))
-        self.data_updated.emit(str(text, 'utf-8'))
-
-class MyWidget(QWidget):
-    def __init__(self, filename):
-        super().__init__()
-
-        self.label = QLabel(self)
-        self.pixmap = QPixmap("background.png")
-        self.label.setPixmap(self.pixmap)
-        #self.showFullScreen()
-        self.setGeometry(0, 0, 1920, 1080)
-        self.label.resize(self.pixmap.width(), self.pixmap.height())
-
-        self.filename = filename
-        self.data_updater = DataUpdater(filename)
-
-        self.layout_base = QHBoxLayout()
-        self.layout_store_names = QVBoxLayout()
-        self.layout_numbers_b = QVBoxLayout()
-        self.layout_numbers_s = QVBoxLayout()
-
-        self.layout_numline1_1 = QHBoxLayout()
-        self.layout_numline1_1.setSpacing(50)
-        self.layout_numline1_2 = QVBoxLayout()
-        self.layout_numline1_2_1 = QHBoxLayout()
-        self.layout_numline1_2_2 = QHBoxLayout()
-
-        self.layout_numline2_1 = QHBoxLayout()
-        self.layout_numline2_1.setSpacing(50)
-        self.layout_numline2_2 = QVBoxLayout()
-        self.layout_numline2_2_1 = QHBoxLayout()
-        self.layout_numline2_2_2 = QHBoxLayout()
-
-        self.layout_numline3_1 = QHBoxLayout()
-        self.layout_numline3_1.setSpacing(50)
-        self.layout_numline3_2 = QVBoxLayout()
-        self.layout_numline3_2_1 = QHBoxLayout()
-        self.layout_numline3_2_2 = QHBoxLayout()
-
-        self.layout_numline4_1 = QHBoxLayout()
-        self.layout_numline4_1.setSpacing(50)
-        self.layout_numline4_2 = QVBoxLayout()
-        self.layout_numline4_2_1 = QHBoxLayout()
-        self.layout_numline4_2_2 = QHBoxLayout()
-
-        pixmap1 = QPixmap("store1.png")
-        pixmap2 = QPixmap("store2.png")
-        pixmap3 = QPixmap("store3.png")
-        pixmap4 = QPixmap("store4.png")
-        self.store_name1 = QLabel()
-        self.store_name1.setPixmap(pixmap1)
-        self.store_name2 = QLabel()
-        self.store_name2.setPixmap(pixmap2)
-        self.store_name3 = QLabel()
-        self.store_name3.setPixmap(pixmap3)
-        self.store_name4 = QLabel()
-        self.store_name4.setPixmap(pixmap4)
-
-#        self.store_name1 = QLabel("Tiger\nSugar")
-#        self.store_name2 = QLabel("Saku")
-#        self.store_name3 = QLabel("Moo")
-#        #self.store_name4 = QLabel("Paik's Noodle")
-#        self.store_name1.setFont(QFont('Arial', 100))
-#        self.store_name2.setFont(QFont('Arial', 100))
-#        self.store_name3.setFont(QFont('Arial', 100))
-#        self.store_name4.setFont(QFont('Arial', 100))
-#        self.store_name1.setStyleSheet("font-weight: bold")
-#        self.store_name2.setStyleSheet("font-weight: bold")
-#        self.store_name3.setStyleSheet("font-weight: bold")
-#        self.store_name4.setStyleSheet("font-weight: bold")
-
-        self.layout_store_names.addWidget(self.store_name1)
-        self.layout_store_names.addWidget(self.store_name2)
-        self.layout_store_names.addWidget(self.store_name3)
-        self.layout_store_names.addWidget(self.store_name4)
-        self.layout_base.addLayout(self.layout_store_names)
-
-        self.numLabel1_1 = QLabel("101")
-        self.numLabel1_2 = QLabel("102")
-        self.numLabel1_3 = QLabel("103")
-        self.numLabel1_4 = QLabel("104")
-        self.numLabel1_5 = QLabel("105")
-        self.numLabel1_6 = QLabel("106")
-        self.numLabel1_7 = QLabel("107")
-
-        self.numLabel2_1 = QLabel("11")
-        self.numLabel2_2 = QLabel("12")
-        self.numLabel2_3 = QLabel("13")
-        self.numLabel2_4 = QLabel("14")
-        self.numLabel2_5 = QLabel("15")
-        self.numLabel2_6 = QLabel("16")
-        self.numLabel2_7 = QLabel("17")
-
-        self.numLabel3_1 = QLabel("21")
-        self.numLabel3_2 = QLabel("22")
-        self.numLabel3_3 = QLabel("23")
-        self.numLabel3_4 = QLabel("24")
-        self.numLabel3_5 = QLabel("25")
-        self.numLabel3_6 = QLabel("26")
-        self.numLabel3_7 = QLabel("27")
-
-        self.numLabel4_1 = QLabel("1")
-        self.numLabel4_2 = QLabel("2")
-        self.numLabel4_3 = QLabel("3")
-        self.numLabel4_4 = QLabel("4")
-        self.numLabel4_5 = QLabel("5")
-        self.numLabel4_6 = QLabel("6")
-        self.numLabel4_7 = QLabel("7")
-
-        self.numLabel1_1.setFont(QFont('Arial', FONT_SIZE_LARGE))
-        self.numLabel1_2.setFont(QFont('Arial', FONT_SIZE_LARGE))
-        self.numLabel1_3.setFont(QFont('Arial', FONT_SIZE_LARGE))
-        self.numLabel1_4.setFont(QFont('Arial', FONT_SIZE_SMALL))
-        self.numLabel1_5.setFont(QFont('Arial', FONT_SIZE_SMALL))
-        self.numLabel1_6.setFont(QFont('Arial', FONT_SIZE_SMALL))
-        self.numLabel1_7.setFont(QFont('Arial', FONT_SIZE_SMALL))
-
-        self.numLabel2_1.setFont(QFont('Arial', FONT_SIZE_LARGE))
-        self.numLabel2_2.setFont(QFont('Arial', FONT_SIZE_LARGE))
-        self.numLabel2_3.setFont(QFont('Arial', FONT_SIZE_LARGE))
-        self.numLabel2_4.setFont(QFont('Arial', FONT_SIZE_SMALL))
-        self.numLabel2_5.setFont(QFont('Arial', FONT_SIZE_SMALL))
-        self.numLabel2_6.setFont(QFont('Arial', FONT_SIZE_SMALL))
-        self.numLabel2_7.setFont(QFont('Arial', FONT_SIZE_SMALL))
-
-        self.numLabel3_1.setFont(QFont('Arial', FONT_SIZE_LARGE))
-        self.numLabel3_2.setFont(QFont('Arial', FONT_SIZE_LARGE))
-        self.numLabel3_3.setFont(QFont('Arial', FONT_SIZE_LARGE))
-        self.numLabel3_4.setFont(QFont('Arial', FONT_SIZE_SMALL))
-        self.numLabel3_5.setFont(QFont('Arial', FONT_SIZE_SMALL))
-        self.numLabel3_6.setFont(QFont('Arial', FONT_SIZE_SMALL))
-        self.numLabel3_7.setFont(QFont('Arial', FONT_SIZE_SMALL))
-
-        self.numLabel4_1.setFont(QFont('Arial', FONT_SIZE_LARGE))
-        self.numLabel4_2.setFont(QFont('Arial', FONT_SIZE_LARGE))
-        self.numLabel4_3.setFont(QFont('Arial', FONT_SIZE_LARGE))
-        self.numLabel4_4.setFont(QFont('Arial', FONT_SIZE_SMALL))
-        self.numLabel4_5.setFont(QFont('Arial', FONT_SIZE_SMALL))
-        self.numLabel4_6.setFont(QFont('Arial', FONT_SIZE_SMALL))
-        self.numLabel4_7.setFont(QFont('Arial', FONT_SIZE_SMALL))
-
-        self.numLabel1_1.setStyleSheet("color: red; font-weight: bold")
-        self.numLabel1_2.setStyleSheet("font-weight: bold")
-        self.numLabel1_3.setStyleSheet("font-weight: bold")
-        self.numLabel2_1.setStyleSheet("color: red; font-weight: bold")
-        self.numLabel2_2.setStyleSheet("font-weight: bold")
-        self.numLabel2_3.setStyleSheet("font-weight: bold")
-        self.numLabel3_1.setStyleSheet("color: red; font-weight: bold")
-        self.numLabel3_2.setStyleSheet("font-weight: bold")
-        self.numLabel3_3.setStyleSheet("font-weight: bold")
-        self.numLabel4_1.setStyleSheet("color: red; font-weight: bold")
-        self.numLabel4_2.setStyleSheet("font-weight: bold")
-        self.numLabel4_3.setStyleSheet("font-weight: bold")
-
-        self.layout_numline1_2_1.addWidget(self.numLabel1_4, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline1_2_1.addWidget(self.numLabel1_5, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline1_2_2.addWidget(self.numLabel1_6, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline1_2_2.addWidget(self.numLabel1_7, alignment=Qt.AlignmentFlag.AlignHCenter)
-
-        self.layout_numline2_2_1.addWidget(self.numLabel2_4, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline2_2_1.addWidget(self.numLabel2_5, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline2_2_2.addWidget(self.numLabel2_6, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline2_2_2.addWidget(self.numLabel2_7, alignment=Qt.AlignmentFlag.AlignHCenter)
-
-        self.layout_numline3_2_1.addWidget(self.numLabel3_4, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline3_2_1.addWidget(self.numLabel3_5, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline3_2_2.addWidget(self.numLabel3_6, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline3_2_2.addWidget(self.numLabel3_7, alignment=Qt.AlignmentFlag.AlignHCenter)
-
-        self.layout_numline4_2_1.addWidget(self.numLabel4_4, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline4_2_1.addWidget(self.numLabel4_5, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline4_2_2.addWidget(self.numLabel4_6, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline4_2_2.addWidget(self.numLabel4_7, alignment=Qt.AlignmentFlag.AlignHCenter)
-
-        self.layout_numline1_2.addLayout(self.layout_numline1_2_1)
-        self.layout_numline1_2.addLayout(self.layout_numline1_2_2)
-
-        self.layout_numline2_2.addLayout(self.layout_numline2_2_1)
-        self.layout_numline2_2.addLayout(self.layout_numline2_2_2)
-
-        self.layout_numline3_2.addLayout(self.layout_numline3_2_1)
-        self.layout_numline3_2.addLayout(self.layout_numline3_2_2)
-
-        self.layout_numline4_2.addLayout(self.layout_numline4_2_1)
-        self.layout_numline4_2.addLayout(self.layout_numline4_2_2)
-
-        self.layout_numline1_1.addWidget(self.numLabel1_1, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline1_1.addWidget(self.numLabel1_2, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline1_1.addWidget(self.numLabel1_3, alignment=Qt.AlignmentFlag.AlignHCenter)
-
-        self.layout_numline2_1.addWidget(self.numLabel2_1, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline2_1.addWidget(self.numLabel2_2, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline2_1.addWidget(self.numLabel2_3, alignment=Qt.AlignmentFlag.AlignHCenter)
-
-        self.layout_numline3_1.addWidget(self.numLabel3_1, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline3_1.addWidget(self.numLabel3_2, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline3_1.addWidget(self.numLabel3_3, alignment=Qt.AlignmentFlag.AlignHCenter)
+                if is_currently_alive and not monitor["is_alive"]:
+                    monitor["is_alive"] = True
+                    monitor["flag"] = "UP"
+                    self.put_err_log(monitor["name"], monitor["flag"])
+                elif not is_currently_alive and monitor["is_alive"]:
+                    monitor["is_alive"] = False
+                    monitor["flag"] = "DOWN"
+                    self.put_err_log(monitor["name"], monitor["flag"])
         
-        self.layout_numline4_1.addWidget(self.numLabel4_1, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline4_1.addWidget(self.numLabel4_2, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.layout_numline4_1.addWidget(self.numLabel4_3, alignment=Qt.AlignmentFlag.AlignHCenter)
+        log_lines = self.read_last_lines()
+        log_content = "".join(log_lines)
+        
+        if self.toPlainText() != log_content:
+             self.play_sound()
+             self.setPlainText(log_content)
 
-        self.layout_numbers_b.addLayout(self.layout_numline1_1)
-        self.layout_numbers_b.addLayout(self.layout_numline2_1)
-        self.layout_numbers_b.addLayout(self.layout_numline3_1)
-        self.layout_numbers_b.addLayout(self.layout_numline4_1)
+        self.data_updated.emit({
+            "text": log_content,
+            "alive_statuses": [m["is_alive"] for m in self.monitors]
+        })
 
-        self.layout_numbers_s.addLayout(self.layout_numline1_2)
-        self.layout_numbers_s.addLayout(self.layout_numline2_2)
-        self.layout_numbers_s.addLayout(self.layout_numline3_2)
-        self.layout_numbers_s.addLayout(self.layout_numline4_2)
-
-        self.layout_base.addLayout(self.layout_numbers_b)
-        self.layout_base.addLayout(self.layout_numbers_s)
-
+# --- MyWidget Class ---
+class MyWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.data_updater = DataUpdater()
+        self.data_updater.data_updated.connect(self.update_text)
+        self.init_ui()
+        
+    def init_ui(self):
+        self.setGeometry(0, 0, 1920, 1080)
+        
+        # --- Main Layout ---
+        self.layout_base = QHBoxLayout()
         self.setLayout(self.layout_base)
 
-        self.data_updater.data_updated.connect(self.update_text)
+        # --- Store Names Column ---
+        store_names_widget = QWidget()
+        store_names_widget.setFixedWidth(450)
+        store_names_widget.setStyleSheet("background-color: white;")
+        layout_store_names = QVBoxLayout(store_names_widget)
+        layout_store_names.setContentsMargins(0, 0, 0, 0)
+        layout_store_names.setSpacing(0)
 
-    def getNumber(self, fullStr):
-        print("fullStr:"+ fullStr)
-#        if fullStr != '':
-#            arr = fullStr.split(',')
-#            return arr[1]
-        return fullStr
-    
-    def update_text(self, new_text):
-        arr = new_text.split('\n')
-        store1 = []
-        store2 = []
-        store3 = []
-        store4 = []
-        for i in reversed(arr):
-            if i.split(',')[0] == '001' and len(store1) < 8:
-                store1.append(i.split(',')[2])
-            elif i.split(',')[0] == '002' and len(store2) < 8:
-                store2.append(i.split(',')[2])
-            elif i.split(',')[0] == '003' and len(store3) < 8:
-                store3.append(i.split(',')[2])
-            elif i.split(',')[0] == '004' and len(store4) < 8:
-                store4.append(i.split(',')[2])
+        # 1080 / 5 = 216 per store
+        store_row_height = 1080 // MAX_STORES
 
-        while len(store1) < 8:
-            #store1.insert(0, " ")
-            store1.append(" ")
-        while len(store2) < 8:
-            #store2.insert(0, " ")
-            store2.append(" ")
-        while len(store3) < 8:
-            #store3.insert(0, " ")
-            store3.append(" ")
-        while len(store4) < 8:
-            #store4.insert(0, " ")  
-            store4.append(" ")
+        store_pixmaps = [f"store{i+1}.png" for i in range(MAX_STORES)]
+        self.store_name_labels = []
+        for i, pixmap_file in enumerate(store_pixmaps):
+            label = QLabel()
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            if i < STORE_CNT and os.path.exists(pixmap_file):
+                pixmap = QPixmap(pixmap_file)
+                label.setPixmap(pixmap.scaled(450, store_row_height, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            else:
+                label.setFixedSize(450, store_row_height)
 
-        # self.showFullScreen()
+            self.store_name_labels.append(label)
+            layout_store_names.addWidget(label)
+            if i < STORE_CNT - 1:
+                h_line = QFrame()
+                h_line.setFrameShape(QFrame.Shape.HLine)
+                h_line.setFrameShadow(QFrame.Shadow.Sunken)
+                h_line.setStyleSheet("border-width: 5px; border-style: solid; border-color: black;")
+                layout_store_names.addWidget(h_line)
 
-        self.numLabel1_1.setText(store1[0])
-        self.numLabel1_2.setText(store1[1])
-        self.numLabel1_3.setText(store1[2])
-        self.numLabel1_4.setText(store1[3])
-        self.numLabel1_5.setText(store1[4])
-        self.numLabel1_6.setText(store1[5])
-        self.numLabel1_7.setText(store1[6])
+        # Clear pixmaps for hidden stores
+        for i in range(STORE_CNT, MAX_STORES):
+            self.store_name_labels[i].setPixmap(QPixmap())
 
-        self.numLabel2_1.setText(store2[0])
-        self.numLabel2_2.setText(store2[1])
-        self.numLabel2_3.setText(store2[2])
-        self.numLabel2_4.setText(store2[3])
-        self.numLabel2_5.setText(store2[4])
-        self.numLabel2_6.setText(store2[5])
-        self.numLabel2_7.setText(store2[6])
+        self.layout_base.addWidget(store_names_widget)
 
-        self.numLabel3_1.setText(store3[0])
-        self.numLabel3_2.setText(store3[1])
-        self.numLabel3_3.setText(store3[2])
-        self.numLabel3_4.setText(store3[3])
-        self.numLabel3_5.setText(store3[4])
-        self.numLabel3_6.setText(store3[5])
-        self.numLabel3_7.setText(store3[6])
+        # --- Vertical Separator ---
+        v_line1_container = QWidget()
+        v_line1_container.setFixedWidth(6)
+        v_line1_layout = QVBoxLayout(v_line1_container)
+        v_line1_layout.setContentsMargins(0, 0, 0, 0)
+        v_line1_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        v_line1 = QFrame()
+        v_line1.setFrameShape(QFrame.Shape.VLine)
+        v_line1.setFrameShadow(QFrame.Shadow.Sunken)
+        v_line1.setStyleSheet("border-width: 2px; border-style: solid; border-color: black;")
+        v_line1.setFixedHeight(store_row_height * STORE_CNT + (STORE_CNT - 1) * 10)
+        
+        v_line1_layout.addWidget(v_line1)
+        self.layout_base.addWidget(v_line1_container)
+        
+        # --- Number Columns ---
+        self.num_labels = []
+        
+        # Big numbers column
+        big_numbers_widget = QWidget()
+        big_numbers_widget.setFixedWidth(950)
+        big_numbers_widget.setStyleSheet("background-color: white;")
+        layout_numbers_b = QVBoxLayout(big_numbers_widget)
+        layout_numbers_b.setContentsMargins(0, 0, 0, 0)
+        layout_numbers_b.setSpacing(0)
 
-        self.numLabel4_1.setText(store4[0])
-        self.numLabel4_2.setText(store4[1])
-        self.numLabel4_3.setText(store4[2])
-        self.numLabel4_4.setText(store4[3])
-        self.numLabel4_5.setText(store4[4])
-        self.numLabel4_6.setText(store4[5])
-        self.numLabel4_7.setText(store4[6])
+        # Small numbers column
+        small_numbers_widget = QWidget()
+        small_numbers_widget.setStyleSheet("background-color: white;")
+        layout_numbers_s = QVBoxLayout(small_numbers_widget)
+        layout_numbers_s.setContentsMargins(0, 0, 0, 0)
+        layout_numbers_s.setSpacing(0)
 
+        font_large = QFont('Arial', FONT_SIZE_LARGE)
+        font_small = QFont('Arial', FONT_SIZE_SMALL)
 
+        for i in range(MAX_STORES):
+            row_labels = []
+            
+            layout_numline_b = QHBoxLayout()
+            layout_numline_b.setSpacing(50)
+            
+            layout_numline_s_container = QVBoxLayout()
+            layout_numline_s1 = QHBoxLayout()
+            layout_numline_s2 = QHBoxLayout()
+            layout_numline_s_container.addLayout(layout_numline_s1)
+            layout_numline_s_container.addLayout(layout_numline_s2)
 
-        # self.label1.setText(self.getNumber(arr[0].split(',')[0]) +" "+ self.getNumber(arr[0].split(',')[2]))
-        # self.label2.setText(self.getNumber(arr[1].split(',')[0]) +" "+ self.getNumber(arr[1].split(',')[2]))
-        # self.label3.setText(self.getNumber(arr[2].split(',')[0]) +" "+ self.getNumber(arr[2].split(',')[2]))
-        # self.label4.setText(self.getNumber(arr[3].split(',')[0]) +" "+ self.getNumber(arr[3].split(',')[2]))
-        # self.label5.setText(self.getNumber(arr[4].split(',')[0]) +" "+ self.getNumber(arr[4].split(',')[2]))
-        # self.label1.setText("Tiger Sugar"+ self.getNumber(arr[5].split(',')[2]))
-        # self.label2.setText("Moobongri"+ self.getNumber(arr[6].split(',')[2]))
-        # self.label3.setText("Paik's Noodle"+ self.getNumber(arr[7].split(',')[2]))
-        # self.label1.setText("Tiger\nSugar")
-        # self.label2.setText("Saku")
-        # self.label3.setText("Moo")
-        # # self.label4.setText("Paik's Noodle")
-        # pixmap = QPixmap('paiks.png')
-        # self.label4.setPixmap(pixmap)
+            for j in range(NUMS_PER_STORE):
+                label = QLabel("")
+                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                
+                if j < 3: # Big numbers
+                    label.setFont(font_large)
+                    label.setStyleSheet("font-weight: bold")
+                    if j == 0:
+                        label.setStyleSheet("color: red; font-weight: bold")
+                    layout_numline_b.addWidget(label)
+                else: # Small numbers
+                    label.setFont(font_small)
+                    if j == 6: # Status indicator
+                         label.setStyleSheet("color: red")
+                    
+                    if j < 5:
+                        layout_numline_s1.addWidget(label)
+                    else:
+                        layout_numline_s2.addWidget(label)
 
-        # # self.label1_1.setText("12 13 14")
-        # self.label1_1_1.setText("12")
-        # self.label1_1_2.setText("13")
-        # self.label1_1_3.setText("14")
-        # self.label2_1.setText("22 23 24")
-        # self.label3_1.setText("98 99 100")
-        # self.label4_1.setText("3 4 5")
+                row_labels.append(label)
+            
+            self.num_labels.append(row_labels)
+            layout_numbers_b.addLayout(layout_numline_b)
+            
+            if i < STORE_CNT - 1:
+                h_line_b = QFrame()
+                h_line_b.setFrameShape(QFrame.Shape.HLine)
+                h_line_b.setFrameShadow(QFrame.Shadow.Sunken)
+                h_line_b.setStyleSheet("border-width: 5px; border-style: solid; border-color: black;")
+                layout_numbers_b.addWidget(h_line_b)
+                
+            layout_numbers_s.addLayout(layout_numline_s_container)
+            if i < STORE_CNT - 1:
+                h_line_s = QFrame()
+                h_line_s.setFrameShape(QFrame.Shape.HLine)
+                h_line_s.setFrameShadow(QFrame.Shadow.Sunken)
+                h_line_s.setStyleSheet("border-width: 5px; border-style: solid; border-color: black;")
+                layout_numbers_s.addWidget(h_line_s)
+            
+        # Cover unused store rows
+        if STORE_CNT < MAX_STORES:
+            self.cover_label = QLabel(self)
+            self.cover_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            cover_y = store_row_height * STORE_CNT + (STORE_CNT - 1) * 10
+            cover_h = 1080 - cover_y
+            cover_file = f"cover_{MAX_STORES - STORE_CNT}.png"
+            cover_pixmap = QPixmap(cover_file)
+            self.cover_label.setGeometry(0, cover_y, 1920, cover_h)
+            for i in range(STORE_CNT, MAX_STORES):
+                self.num_labels[i][6].hide()
+            self.cover_label.setPixmap(cover_pixmap)
+            QTimer.singleShot(0, self.cover_label.raise_)
+            self.cover_label.raise_()
 
-        # # self.label1_2.setText("112 113 114 115 116")
-        # self.label1_2_1.setText("112")
-        # self.label1_2_2.setText("113")
-        # self.label1_2_3.setText("114")
-        # self.label1_2_4.setText("115")
-        # self.label1_2_5.setText("116")
-        # self.label2_2.setText("122 123 124 125 126")
-        # self.label3_2.setText("2 3 4 100 21")
-        # self.label4_2.setText("13")
+        self.layout_base.addWidget(big_numbers_widget)
+        self.layout_base.addWidget(small_numbers_widget)
+        
+    def update_text(self, data):
+        new_text = data["text"]
+        alive_statuses = data["alive_statuses"]
+        
+        stores_data = [[] for _ in range(MAX_STORES)]
+        
+        for line in reversed(new_text.strip().split('\n')):
+            if not line:
+                continue
+            try:
+                parts = line.split(',')
+                store_idx = int(parts[0][2])
+                if 0 <= store_idx < MAX_STORES and len(stores_data[store_idx]) < NUMS_PER_STORE:
+                    stores_data[store_idx].append(parts[2])
+            except (IndexError, ValueError) as e:
+                print(f"Skipping malformed line: {line} - Error: {e}")
+                continue
 
-        # self.label1.setText(self.getNumber(arr[0].split(',')[0]) +" "+ self.getNumber(arr[0].split(',')[2]))
-        # self.label2.setText(self.getNumber(arr[1].split(',')[0]) +" "+ self.getNumber(arr[1].split(',')[2]))
-        # self.label3.setText(self.getNumber(arr[2].split(',')[0]) +" "+ self.getNumber(arr[2].split(',')[2]))
-        # self.label4.setText(self.getNumber(arr[3].split(',')[0]) +" "+ self.getNumber(arr[3].split(',')[2]))
-        # self.label5.setText(self.getNumber(arr[4].split(',')[0]) +" "+ self.getNumber(arr[4].split(',')[2]))
-        # self.label6.setText(self.getNumber(arr[5].split(',')[0]) +" "+ self.getNumber(arr[5].split(',')[2]))
-        # self.label7.setText(self.getNumber(arr[6].split(',')[0]) +" "+ self.getNumber(arr[6].split(',')[2]))
-        # if self.getNumber(arr[7].split(',')[0]) != "000":
-        #     print("----------!--000")
-        #     self.label8.setText(self.getNumber(arr[7].split(',')[2]))
-        # else:
-        #     print("------------000")
-        #     self.label8.setText(self.getNumber(arr[7].split(',')[0]) +" "+ self.getNumber(arr[7].split(',')[2]))
+        for i, store_data in enumerate(stores_data):
+            while len(store_data) < NUMS_PER_STORE:
+                store_data.append(" ")
+            
+            for j in range(6):
+                self.num_labels[i][j].setText(store_data[j])
+
+            status_label = self.num_labels[i][6]
+            if alive_statuses[i]:
+                status_label.setText(store_data[6])
+                status_label.setStyleSheet("color: black")
+            else:
+                status_label.setText("*")
+                status_label.setStyleSheet("color: red")
+
+        self.showFullScreen()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-
-    widget = MyWidget("cur_num.csv")
+    widget = MyWidget()
     widget.setCursor(QCursor(Qt.CursorShape.BlankCursor))
-
     widget.showFullScreen()
-
-#    widget.show()
     sys.exit(app.exec())
-

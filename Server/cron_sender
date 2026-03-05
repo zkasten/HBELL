@@ -1,0 +1,14 @@
+# HBell Display
+@reboot /home/pi/bellService.sh > /dev/null 2> /dev/null &
+* * * * * /home/pi/bellService.sh > /dev/null 2> /dev/null &
+
+# HBell nRF24 Receiver
+@reboot /home/pi/bellReceiver.sh > /dev/null 2> /dev/null &
+* * * * * /home/pi/bellReceiver.sh > /dev/null 2> /dev/null &
+
+# HBell wifi Receiver
+@reboot /home/pi/wifiReceiver.sh > /dev/null 2> /dev/null &
+* * * * * /home/pi/wifiReceiver.sh > /dev/null 2> /dev/null &
+
+# HBell Log Cleaner
+0 3 * * * /home/pi/cleanup_logs.sh

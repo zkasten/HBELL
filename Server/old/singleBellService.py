@@ -2,33 +2,35 @@ import sys
 import os
 import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QTextEdit)
-from PyQt6.QtCore import QTimer, pyqtSignal, Qt, QFile, QIODevice, QByteArray, QTextStream
+from PyQt6.QtCore import QTimer, pyqtSignal, QObject, Qt, QFile, QIODevice, QUrl, QTextStream, QByteArray
 from PyQt6.QtGui import QFont, QCursor, QPixmap
 from PyQt6.QtWidgets import QFrame
 import pygame
 import time
 import configparser
-import fcntl
-
-# HBELL Wifi Multicast Receiver
-# V1.2.1
-#
-# 2026-02-05 Refectored legacy code, Added ACK handling from multiple servers - Hyukjoo
+import psutil
 
 config = configparser.ConfigParser()
-config.read('/home/pi/HBELL-Receiver/hbell.cfg')
+config.read('/home/pi/hbell.cfg')
 
             
 STORE_NUMBER = config['STORE']['ADDRESS']
-ENABLE_SOUND = config.getboolean('DISPLAY', 'ENABLE_SOUND', fallback=True)
 
-FILE_ALIVE = f"/home/pi/log/alive{STORE_NUMBER[2]}.txt"
+FILE_ALIVE = "/home/pi/log/alive1.txt"
+if STORE_NUMBER == "001":
+    FILE_ALIVE = "/home/pi/log/alive1.txt"
+elif STORE_NUMBER == "002":
+    FILE_ALIVE = "/home/pi/log/alive2.txt"
+elif STORE_NUMBER == "003":
+    FILE_ALIVE = "/home/pi/log/alive3.txt"
+elif STORE_NUMBER == "004":
+    FILE_ALIVE = "/home/pi/log/alive4.txt"
 
 ISALIVE = True
 LOG_FILE_DIR = "/home/pi/log/"
-RING_FILE = "/home/pi/ring.wav"
+RING_FILE = "ring.wav"
 UPDATE_INTERVAL_MS = 1000
-ALIVE_INTERVAL = 25 # seconds
+ALIVE_INTERVAL = 7 # seconds
 
 class DataUpdater(QTextEdit):
     data_updated = pyqtSignal(str)
@@ -45,21 +47,17 @@ class DataUpdater(QTextEdit):
         self.sound = pygame.mixer.Sound(RING_FILE)
 
     def play_sound(self):
-        if ENABLE_SOUND:
-            self.sound.play()
+        self.sound.play()
 
-    def file_open(self, file_path, mode='r', max_retries=10):
-        for _ in range(max_retries):
+    def is_file_open(self, file_path):
+        for proc in psutil.process_iter(['pid', 'open_files']):
             try:
-                f = open(file_path, mode)
-                lock_type = fcntl.LOCK_SH if mode == 'r' else fcntl.LOCK_EX
-                fcntl.flock(f, lock_type | fcntl.LOCK_NB)
-                return f
-            except BlockingIOError:
-                f.close()
-                time.sleep(0.1)
-        raise TimeoutError(f"File Lock failed: {file_path}")
-
+                for file in proc.info['open_files'] or []:
+                    if file.path == file_path:
+                        return True
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        return False
     def create_empty_file_if_not_exists(self):
         log_file = LOG_FILE_DIR + str(datetime.date.today()) + ".log"
 
@@ -73,61 +71,51 @@ class DataUpdater(QTextEdit):
     def clean_log_file(self):
         ring = False
         log_file = LOG_FILE_DIR + str(datetime.date.today()) + ".log"
-        f = None
         try:
-            f = self.file_open(log_file, 'r')
-            lines = f.readlines()
+            with open(log_file, "r") as num_file:
+                lines = num_file.readlines()
         except FileNotFoundError:
-            return False
-        finally:
-            if f:
-                fcntl.flock(f, fcntl.LOCK_UN)
-                f.close()
+            return f"Error: File '{log_file}' not found."
 
-        delItems = {}
-        filtered = []
-        for i in reversed(lines):
-            lineArr = i.split(",")
-            if len(lineArr) < 3:
-                continue
-            if not lineArr[0].isdigit():
-                continue
-            if not lineArr[2].strip().isdigit():
-                continue
-            if lineArr[2].strip() == '99999':
-                ring = True
-            if lineArr[1] == '-':
-                delItems[lineArr[2].strip()] = lineArr[0]
-            else:
-                if lineArr[2].strip() in delItems and lineArr[0] == delItems[lineArr[2].strip()]:
+        while self.is_file_open(log_file):
+            time.sleep(0.01)  # Wait until the file is not open by another process
+            
+        with open(log_file, "w") as num_file:
+            delItems = {}
+            for i in reversed(lines):
+                lineArr = i.split(",")
+                if len(lineArr) < 3:
+                    lines.remove(i)
                     continue
-                filtered.append(i)
-        filtered.reverse()
-
-        f = None
-        try:
-            f = self.file_open(log_file, 'w')
-            f.writelines(filtered)
-        finally:
-            if f:
-                fcntl.flock(f, fcntl.LOCK_UN)
-                f.close()
-
+                if not lineArr[0].isdigit():
+                    lines.remove(i)
+                    continue
+                if not lineArr[2].replace('\n','').isdigit():
+                    lines.remove(i)
+                    continue
+                if lineArr[2].replace('\n','') == '99999':
+                    ring = True
+                if lineArr[1] == '-':
+                    delItems[lineArr[2].strip('\n')] = lineArr[0]
+                    lines.remove(i)
+                else:
+                    if lineArr[2].strip('\n') in delItems and lineArr[0] == delItems[lineArr[2].strip('\n')]:
+                        lines.remove(i)
+            num_file.writelines(lines)
         return ring
                                 
     def read_last_lines(self):
         log_file = LOG_FILE_DIR + str(datetime.date.today()) + ".log"
-        f = None
-        try:
-            f = self.file_open(log_file, 'r')
-            lines = f.readlines()
-            return [line.rstrip('\n') for line in lines]
-        except (FileNotFoundError, TimeoutError):
+        file = QFile(log_file)
+        lines = []
+        stream = QTextStream(file)
+        if not file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
             return None
-        finally:
-            if f:
-                fcntl.flock(f, fcntl.LOCK_UN)
-                f.close()
+        while not stream.atEnd():
+            lines.append(stream.readLine())
+        file.close()
+
+        return lines
 
     def update_data(self):
         self.create_empty_file_if_not_exists()
@@ -149,14 +137,11 @@ class DataUpdater(QTextEdit):
         file = QFile(self.filename)
         if file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
             text = file.readAll()
-            file.close()
         else:
             self.setPlainText("Failed to open file.")
-            return
+        file.close()
 
         log = self.read_last_lines()
-        if log is None:
-            return
         log_b_arr = QByteArray()
         for i in log:
             if i.split(',')[0] == STORE_NUMBER:
@@ -206,8 +191,7 @@ class MyWidget(QWidget):
         font_small = QFont('Arial', 120)
         font_large = QFont('Arial', 210)
 
-        #colors = ['#F5F5DC', '#FFE4E1']
-        colors = ['#eeeeee', '#cbcbcb']
+        colors = ['#F5F5DC', '#FFE4E1']
 
         for i in range(3):
             self.labels[i].setFont(font_large)
@@ -266,7 +250,7 @@ class MyWidget(QWidget):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
 
-    widget = MyWidget("/home/pi/cur_num.csv")
+    widget = MyWidget("cur_num.csv")
     widget.setCursor(QCursor(Qt.CursorShape.BlankCursor))
 
     widget.showFullScreen()
